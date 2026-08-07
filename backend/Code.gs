@@ -1,26 +1,26 @@
 /**
- * SupplyNow · Expense & Payout Ledger — Backend (Google Apps Script)
+ * Personal Expense Tool - Backend (Google Apps Script)
  * ------------------------------------------------------------------
  * Makes the ledger LIVE + DYNAMIC + SHARED across every device and user,
  * and saves every receipt photo into a Google Drive folder.
  *
- * ONE-TIME SETUP (≈60 seconds):
- *   1. Go to https://script.google.com  →  New project.
+ * ONE-TIME SETUP (about 60 seconds):
+ *   1. Go to https://script.google.com  -  New project.
  *   2. Delete the sample code, paste ALL of this file, Save.
- *   3. Run the function `setup` once (top toolbar ▸ Run).
+ *   3. Run the function `setup` once (top toolbar > Run).
  *      - Approve the permissions prompt (it creates a Drive folder + DB file
  *        in YOUR Drive and seeds the 15 current expenses).
- *   4. Deploy ▸ New deployment ▸ type "Web app".
+ *   4. Deploy > New deployment > type "Web app".
  *        Execute as: Me      Who has access: Anyone
  *      Click Deploy, copy the /exec Web app URL.
- *   5. In the app, open ⚙ Connect (top right), paste that URL, Save.
+ *   5. In the app, open Connect (top right), paste that URL, Save.
  *      (Send Mike the URL and he can bake it in so it's zero-config for all.)
  *
- * Re-deploy note: after editing code, Deploy ▸ Manage deployments ▸ edit ▸
+ * Re-deploy note: after editing code, Deploy > Manage deployments > edit >
  * "New version" so the live URL picks up changes.
  */
 
-var APP_FOLDER   = 'SupplyNow Ledger';
+var APP_FOLDER   = 'Personal Expense Tool';
 var DB_FILENAME  = 'ledger-db.json';
 var PROP = PropertiesService.getScriptProperties();
 
