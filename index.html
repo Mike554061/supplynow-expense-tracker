@@ -276,7 +276,7 @@ tr:hover td{background:rgba(31,214,220,.05)}
             <div class="big" style="font-weight:200;letter-spacing:.3em;color:var(--cyan)">[ + ]</div>
             <div style="margin-top:8px;font-weight:600">Tap to snap / choose a receipt</div>
             <div style="font-size:12px;color:var(--dim);margin-top:4px">On-device OCR fills date, vendor &amp; amount automatically</div>
-            <input type="file" id="fileIn" accept="image/*" capture="environment" class="hidden"/>
+            <input type="file" id="fileIn" accept="image/*" class="hidden"/>
           </div>
           <div class="ocrstat" id="ocrStat"></div>
           <div class="preview hidden" id="previewWrap"><img id="previewImg" alt="receipt"/></div>
@@ -430,7 +430,7 @@ function seedIfEmpty(){
 /* ================= LIVE BACKEND (Google Apps Script) ================= */
 /* Paste your deployed /exec Web-app URL here to make it zero-config for
    every user & device. Leave "" to configure in-app via  Connect. */
-const HARDCODED_BACKEND = "";
+const HARDCODED_BACKEND = "https://script.google.com/macros/s/AKfycbwLLwmzN-M3HlvpF9VBerYeVSfYZOMGno-zLwzTwYsJsaux7fd0d4AXYkhpag05gypJJg/exec";
 function endpoint(){ return (HARDCODED_BACKEND || LS.get("endpoint","") || "").trim(); }
 function online(){ return !!endpoint(); }
 function cred(){ return LS.get("cred",{}); }
@@ -679,7 +679,7 @@ function togglePaid(id,on){
 function delExpense(id){ if(!confirm("Delete expense "+id+"?"))return;
   DB.expenses=DB.expenses.filter(e=>e.id!==id); save(); renderAll(); toast("Deleted "+id); }
 function attachReceipt(id){
-  const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.capture="environment";
+  const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
   inp.onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
     r.onload=async ev=>{ const e2=DB.expenses.find(x=>x.id===id); const dataUrl=await shrink(ev.target.result);
       if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id,dataUrl}); e2.receiptFileId=j.fileId; e2.img=null; }catch(err){ e2.img=dataUrl; } }
