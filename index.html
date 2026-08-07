@@ -132,6 +132,7 @@ tr:hover td{background:rgba(31,214,220,.05)}
   box-shadow:0 4px 14px -4px rgba(0,0,0,.6);transition:.2s}
 .thumb:hover{transform:scale(1.08);box-shadow:0 0 20px -2px rgba(31,214,220,.8)}
 .thumb.empty{display:grid;place-items:center;font-size:18px;font-weight:200;color:var(--cyan);background:rgba(13,20,21,.7);cursor:pointer}
+.thumb.rcpt{display:grid;place-items:center;font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--cyan);background:rgba(31,214,220,.12);border-color:var(--line2);cursor:pointer}
 .pill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:2px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:1px solid}
 .st-Paid{color:var(--green);border-color:rgba(63,214,192,.45);background:rgba(63,214,192,.1)}
 .st-Submitted{color:var(--amber);border-color:rgba(255,203,154,.45);background:rgba(255,203,154,.1)}
@@ -481,8 +482,10 @@ const money=n=>"$"+(+n||0).toLocaleString(undefined,{minimumFractionDigits:2,max
 const esc=s=>(s||"").toString().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2200)}
 const owedOf=e=>Math.max(0,(+e.amount)-(+e.reimbursed||0));
-function receiptSrc(e){ if(e.img) return e.img; if(e.receiptFileId) return "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w600"; return null; }
-function receiptView(e){ if(e.receiptFileId) return "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w1600"; return e.img||null; }
+function receiptSrc(e){ return e.img || e.imgThumb || (e.receiptFileId? "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w600" : null); }
+function receiptView(e){ if(e.receiptFileId) return "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w1600"; return e.img||e.imgThumb||null; }
+function hasReceipt(e){ return !!(e.img||e.imgThumb||e.receiptFileId); }
+function rcptFallback(img,id){ img.outerHTML='<div class="thumb rcpt" title="Receipt attached" onclick="lightbox(\''+id+'\')">RCPT</div>'; }
 function statusOf(e){ if(e.status==="Not Submitted")return "Not Submitted";
   if((+e.reimbursed||0)>=(+e.amount))return "Paid";
   if((+e.reimbursed||0)>0)return "Partial";
@@ -611,7 +614,7 @@ async function saveExpense(){
     status:$("#fStatus").value, img:null, receiptFileId:null, dateReimbursed:null, createdBy:DB.session };
   if(e.status==="Paid"){ e.reimbursed=amount; e.dateReimbursed=e.date; }
   if(pendingImg){
-    if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id:e.id,dataUrl:pendingImg}); e.receiptFileId=j.fileId; }
+    if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id:e.id,dataUrl:pendingImg}); e.receiptFileId=j.fileId; e.imgThumb=await shrink(pendingImg,340,0.55); }
       catch(err){ e.img=pendingImg; toast("Receipt kept locally (Drive upload failed)"); } }
     else e.img=pendingImg;
   }
@@ -642,7 +645,7 @@ function renderLedger(){
       shown++;
       const tr=document.createElement("tr");
       tr.innerHTML=`
-        <td>${receiptSrc(e)?`<img class="thumb" src="${receiptSrc(e)}" onclick="lightbox('${e.id}')"/>`
+        <td>${hasReceipt(e)?`<img class="thumb" src="${receiptSrc(e)}" onclick="lightbox('${e.id}')" onerror="rcptFallback(this,'${e.id}')"/>`
           :`<div class="thumb empty" title="Add receipt" onclick="attachReceipt('${e.id}')">+</div>`}</td>
         <td style="white-space:nowrap">${e.date}<div class="sub-id">${e.id}</div></td>
         <td>${esc(e.payee)}${e.notes?`<div class="sub-id">${esc(e.notes)}</div>`:""}</td>
@@ -685,7 +688,7 @@ function attachReceipt(id){
   const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
   inp.onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
     r.onload=async ev=>{ const e2=DB.expenses.find(x=>x.id===id); const dataUrl=await shrink(ev.target.result);
-      if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id,dataUrl}); e2.receiptFileId=j.fileId; e2.img=null; }catch(err){ e2.img=dataUrl; } }
+      if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id,dataUrl}); e2.receiptFileId=j.fileId; e2.imgThumb=await shrink(dataUrl,340,0.55); e2.img=null; }catch(err){ e2.img=dataUrl; } }
       else e2.img=dataUrl;
       save(); renderLedger(); toast("Receipt attached"); };
     r.readAsDataURL(f); };
@@ -902,7 +905,8 @@ function modal(html){ $("#modalRoot").innerHTML=`<div class="overlay" onclick="i
   <div class="card modal"><button class="btn ghost sm close" onclick="closeModal()">×</button>${html}</div></div>`; }
 function closeModal(){ $("#modalRoot").innerHTML=""; }
 function lightbox(id){ const e=DB.expenses.find(x=>x.id===id); const src=receiptView(e); if(!src)return;
-  $("#modalRoot").innerHTML=`<div class="overlay lightbox" onclick="closeModal()"><img src="${src}"/></div>`; }
+  $("#modalRoot").innerHTML=`<div class="overlay lightbox" onclick="closeModal()"><img id="lbimg"/></div>`;
+  const img=$("#lbimg"); img.onerror=()=>{ const fb=e.img||e.imgThumb; if(fb&&img.src!==fb) img.src=fb; }; img.src=src; }
 
 /* ================= EXPORT ================= */
 function exportData(){
