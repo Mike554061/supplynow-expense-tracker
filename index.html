@@ -442,7 +442,7 @@ async function api(action,data){
   if(j&&j.ok===false) throw new Error(j.error||"backend error");
   return j;
 }
-let PUSHING=false, PUSH_QUEUED=false, POLL=null;
+let PUSHING=false, PUSH_QUEUED=false, POLL=null, DIRTY=false;
 async function pushState(){
   if(!online()) return;
   if(PUSHING){ PUSH_QUEUED=true; return; }
@@ -450,19 +450,22 @@ async function pushState(){
   try{
     const c=cred();
     await api("push",{email:c.email,pass:c.pass,state:{users:DB.users,expenses:DB.expenses,deposits:DB.deposits}});
+    if(!PUSH_QUEUED) DIRTY=false;   // local changes are now safely on the backend
     setSyncPill("live");
-  }catch(e){ setSyncPill("error"); toast(" Sync failed: "+e.message); }
+  }catch(e){ setSyncPill("error"); toast("Sync failed: "+e.message); }
   PUSHING=false;
   if(PUSH_QUEUED){ PUSH_QUEUED=false; pushState(); }
 }
 async function pullState(silent){
-  if(!online()) return;
+  // never overwrite local state while a write is pending/unsynced — that wipes just-added items
+  if(!online() || PUSHING || PUSH_QUEUED || DIRTY) return;
   try{
     const j=await api("pull",{});
+    if(DIRTY||PUSHING) return;       // a local change landed while we were fetching — keep it
     if(j.state){ DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[];
       LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits);
-      renderAll(); setSyncPill("live"); if(!silent) toast(" Synced from cloud"); }
-  }catch(e){ setSyncPill("error"); if(!silent) toast(" Sync failed: "+e.message); }
+      renderAll(); setSyncPill("live"); if(!silent) toast("Synced from cloud"); }
+  }catch(e){ setSyncPill("error"); if(!silent) toast("Sync failed: "+e.message); }
 }
 function setSyncPill(state){
   const p=$("#syncPill"); if(!p)return;
@@ -472,14 +475,14 @@ function setSyncPill(state){
 }
 function syncNow(){ if(!online()){ toast("Not connected — open  Connect"); return; } pullState(false); }
 
-function save(){ LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits); pushState(); }
+function save(){ if(online()) DIRTY=true; LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits); pushState(); }
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const money=n=>"$"+(+n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc=s=>(s||"").toString().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2200)}
 const owedOf=e=>Math.max(0,(+e.amount)-(+e.reimbursed||0));
 function receiptSrc(e){ if(e.img) return e.img; if(e.receiptFileId) return "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w600"; return null; }
-function receiptView(e){ if(e.receiptFileId) return "https://drive.google.com/uc?export=view&id="+e.receiptFileId; return e.img||null; }
+function receiptView(e){ if(e.receiptFileId) return "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w1600"; return e.img||null; }
 function statusOf(e){ if(e.status==="Not Submitted")return "Not Submitted";
   if((+e.reimbursed||0)>=(+e.amount))return "Paid";
   if((+e.reimbursed||0)>0)return "Partial";
