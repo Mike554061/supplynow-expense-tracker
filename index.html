@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
 <title>Personal Expense Tool</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23080d0e'/%3E%3Cpath d='M50 12 L86 50 L50 88 L14 50 Z' fill='none' stroke='%231fd6dc' stroke-width='7'/%3E%3Cpath d='M50 34 L66 50 L50 66 L34 50 Z' fill='none' stroke='%23D9B08C' stroke-width='6'/%3E%3C/svg%3E"/>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -371,6 +374,7 @@ tr:hover td{background:rgba(31,214,220,.05)}
 
 <div id="modalRoot"></div>
 <div class="toast" id="toast"></div>
+<div id="buildTag" style="position:fixed;bottom:6px;right:9px;z-index:5;font-size:9px;letter-spacing:.12em;color:var(--dim);opacity:.55;pointer-events:none">BUILD 9</div>
 
 <script>
 /* ================= CONFIG / SEED ================= */
@@ -556,11 +560,18 @@ async function handleFile(file){
   reader.readAsDataURL(file);
 }
 function shrink(dataUrl,max=1100,q=0.72){
-  return new Promise(res=>{ const img=new Image(); img.onload=()=>{
-    let{width:w,height:h}=img; if(w>max||h>max){const s=max/Math.max(w,h);w*=s;h*=s;}
-    const c=document.createElement("canvas");c.width=w;c.height=h;
-    c.getContext("2d").drawImage(img,0,0,w,h); res(c.toDataURL("image/jpeg",q));
-  }; img.src=dataUrl; });
+  return new Promise(res=>{
+    const img=new Image();
+    const to=setTimeout(()=>res(dataUrl),8000);              // never hang on odd formats
+    img.onload=()=>{ clearTimeout(to); try{
+      let{width:w,height:h}=img; if(!w||!h) return res(dataUrl);
+      if(w>max||h>max){const s=max/Math.max(w,h);w*=s;h*=s;}
+      const c=document.createElement("canvas");c.width=w;c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h); res(c.toDataURL("image/jpeg",q));
+    }catch(e){ res(dataUrl); } };
+    img.onerror=()=>{ clearTimeout(to); res(dataUrl); };
+    img.src=dataUrl;
+  });
 }
 async function runOCR(img){
   const st=$("#ocrStat"); st.textContent=" Reading receipt…";
@@ -686,11 +697,13 @@ function delExpense(id){ if(!confirm("Delete expense "+id+"?"))return;
   DB.expenses=DB.expenses.filter(e=>e.id!==id); save(); renderAll(); toast("Deleted "+id); }
 function attachReceipt(id){
   const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
-  inp.onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
+  inp.style.cssText="position:fixed;left:-9999px;top:0"; document.body.appendChild(inp); // iOS needs it in the DOM
+  inp.onchange=e=>{ const f=e.target.files[0]; if(!f){inp.remove();return;} toast("Uploading receipt…"); const r=new FileReader();
     r.onload=async ev=>{ const e2=DB.expenses.find(x=>x.id===id); const dataUrl=await shrink(ev.target.result);
-      if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id,dataUrl}); e2.receiptFileId=j.fileId; e2.imgThumb=await shrink(dataUrl,340,0.55); e2.img=null; }catch(err){ e2.img=dataUrl; } }
+      if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id,dataUrl}); e2.receiptFileId=j.fileId; e2.imgThumb=await shrink(dataUrl,340,0.55); e2.img=null; }catch(err){ e2.img=dataUrl; toast("Saved on device (cloud upload failed)"); } }
       else e2.img=dataUrl;
-      save(); renderLedger(); toast("Receipt attached"); };
+      save(); renderLedger(); toast("Receipt attached"); inp.remove(); };
+    r.onerror=()=>{ toast("Could not read that photo"); inp.remove(); };
     r.readAsDataURL(f); };
   inp.click();
 }
