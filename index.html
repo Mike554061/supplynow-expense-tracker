@@ -374,7 +374,7 @@ tr:hover td{background:rgba(31,214,220,.05)}
 
 <div id="modalRoot"></div>
 <div class="toast" id="toast"></div>
-<div id="buildTag" style="position:fixed;bottom:6px;right:9px;z-index:5;font-size:9px;letter-spacing:.12em;color:var(--dim);opacity:.55;pointer-events:none">BUILD 9</div>
+<div id="buildTag" style="position:fixed;bottom:6px;right:9px;z-index:5;font-size:9px;letter-spacing:.12em;color:var(--dim);opacity:.55;pointer-events:none">BUILD 10</div>
 
 <script>
 /* ================= CONFIG / SEED ================= */
@@ -447,7 +447,7 @@ async function api(action,data){
   if(j&&j.ok===false) throw new Error(j.error||"backend error");
   return j;
 }
-let PUSHING=false, PUSH_QUEUED=false, POLL=null, DIRTY=false;
+let PUSHING=false, PUSH_QUEUED=false, POLL=null, DIRTY=false, BUSY=false;
 async function pushState(){
   if(!online()) return;
   if(PUSHING){ PUSH_QUEUED=true; return; }
@@ -463,10 +463,10 @@ async function pushState(){
 }
 async function pullState(silent){
   // never overwrite local state while a write is pending/unsynced — that wipes just-added items
-  if(!online() || PUSHING || PUSH_QUEUED || DIRTY) return;
+  if(!online() || PUSHING || PUSH_QUEUED || DIRTY || BUSY) return;
   try{
     const j=await api("pull",{});
-    if(DIRTY||PUSHING) return;       // a local change landed while we were fetching — keep it
+    if(DIRTY||PUSHING||BUSY) return;  // a local change landed while we were fetching — keep it
     if(j.state){ DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[];
       LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits);
       renderAll(); setSyncPill("live"); if(!silent) toast("Synced from cloud"); }
@@ -528,8 +528,7 @@ function enterApp(){
   buildForm(); renderAll(); setSyncPill("live");
   if(online()){ pullState(true);
     if(POLL) clearInterval(POLL);
-    POLL=setInterval(()=>{ if(!document.hidden && !PUSHING) pullState(true); }, 30000);
-    window.addEventListener("focus",()=>{ if(online()&&!PUSHING) pullState(true); });
+    POLL=setInterval(()=>{ if(!document.hidden && !PUSHING && !BUSY && !DIRTY) pullState(true); }, 30000);
   }
 }
 
@@ -624,12 +623,13 @@ async function saveExpense(){
     method:$("#fMethod").value, ref:$("#fRef").value.trim(), notes:$("#fNotes").value.trim(),
     status:$("#fStatus").value, img:null, receiptFileId:null, dateReimbursed:null, createdBy:DB.session };
   if(e.status==="Paid"){ e.reimbursed=amount; e.dateReimbursed=e.date; }
+  BUSY=true;
   if(pendingImg){
     if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id:e.id,dataUrl:pendingImg}); e.receiptFileId=j.fileId; e.imgThumb=await shrink(pendingImg,340,0.55); }
-      catch(err){ e.img=pendingImg; toast("Receipt kept locally (Drive upload failed)"); } }
+      catch(err){ e.img=pendingImg; toast("Receipt kept locally (cloud upload failed)"); } }
     else e.img=pendingImg;
   }
-  DB.expenses.push(e); save();
+  DB.expenses.push(e); BUSY=false; save();
   pendingImg=null; $("#previewWrap").classList.add("hidden"); $("#ocrStat").textContent="";
   ["fAmount","fPayee","fRef","fNotes"].forEach(id=>$("#"+id).value="");
   $("#fStatus").value="Submitted";
@@ -698,12 +698,15 @@ function delExpense(id){ if(!confirm("Delete expense "+id+"?"))return;
 function attachReceipt(id){
   const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
   inp.style.cssText="position:fixed;left:-9999px;top:0"; document.body.appendChild(inp); // iOS needs it in the DOM
-  inp.onchange=e=>{ const f=e.target.files[0]; if(!f){inp.remove();return;} toast("Uploading receipt…"); const r=new FileReader();
-    r.onload=async ev=>{ const e2=DB.expenses.find(x=>x.id===id); const dataUrl=await shrink(ev.target.result);
-      if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id,dataUrl}); e2.receiptFileId=j.fileId; e2.imgThumb=await shrink(dataUrl,340,0.55); e2.img=null; }catch(err){ e2.img=dataUrl; toast("Saved on device (cloud upload failed)"); } }
-      else e2.img=dataUrl;
-      save(); renderLedger(); toast("Receipt attached"); inp.remove(); };
-    r.onerror=()=>{ toast("Could not read that photo"); inp.remove(); };
+  inp.onchange=e=>{ const f=e.target.files[0]; if(!f){inp.remove();return;} BUSY=true; toast("Uploading receipt…"); const r=new FileReader();
+    r.onload=async ev=>{ const dataUrl=await shrink(ev.target.result);
+      let fileId=null, thumb=null, localImg=null;
+      if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id,dataUrl}); fileId=j.fileId; thumb=await shrink(dataUrl,340,0.55); }catch(err){ localImg=dataUrl; toast("Saved on device (cloud upload failed)"); } }
+      else localImg=dataUrl;
+      const e2=DB.expenses.find(x=>x.id===id);   // re-find AFTER awaits — DB may have been refreshed
+      if(e2){ if(fileId){ e2.receiptFileId=fileId; e2.imgThumb=thumb; e2.img=null; } else { e2.img=localImg; } }
+      BUSY=false; save(); renderLedger(); toast("Receipt attached"); inp.remove(); };
+    r.onerror=()=>{ BUSY=false; toast("Could not read that photo"); inp.remove(); };
     r.readAsDataURL(f); };
   inp.click();
 }
