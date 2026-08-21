@@ -10,7 +10,8 @@ Restricted-access web app for logging work expenses paid with personal funds, re
 
 ## What it does
 - **Receipt upload + on-device OCR** (Tesseract.js) auto-fills date, vendor, amount, and guesses the cost center.
-- **Immutable ledger** — every expenditure ever created stays and lives; records never move or delete. Most current on top, oldest at the bottom. Rows are editable for OCR gaps / manual (no-receipt) entries. Paid checkbox on every row.
+- **Append-only ledger** — every expenditure ever created stays and lives. Most current on top, oldest at the bottom. Rows are editable for OCR gaps / manual (no-receipt) entries. Paid checkbox on every row.
+- **Keyed delete** — each row has a **DEL** button that removes only that row (safe even when IDs collide from a double-submit). It requires a confirmation key before it will delete, so accidental taps do nothing.
 - **Metrics** — total personal spent, YTD, total reimbursed, total unpaid, open count, transfer fees YTD.
 - **Personal Money Outstanding** — large running total owed back, broken out by cost center.
 - **Deposits & Payroll** — anyone can log a deposit; Mike confirms allocation to expenses (updates paid/unpaid). Apple Cash deposits from Aaron ≥ $20,000 auto-flag as bi-weekly payroll (+$45 transfer fee). Transfer fees YTD baseline $1,869.23.

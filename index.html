@@ -157,6 +157,8 @@ tr:hover td{background:rgba(31,214,220,.05)}
 .iconbtn{padding:5px 10px;border-radius:2px;border:1px solid var(--line);background:rgba(13,20,21,.6);
   font-size:10px;letter-spacing:.12em;color:var(--mut);transition:.15s}
 .iconbtn:hover{color:var(--cyan);border-color:var(--cyan);transform:translateY(-1px)}
+.iconbtn.danger{margin-left:4px}
+.iconbtn.danger:hover{color:#ff6b6b;border-color:#ff6b6b}
 
 /* ---------- form / intake ---------- */
 .grid2{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}
@@ -415,6 +417,8 @@ const LS = {
   set:(k,v)=>localStorage.setItem("snx_"+k,JSON.stringify(v))
 };
 let DB = { users:[], expenses:[], deposits:[], session:null };
+/* Key required to delete a ledger row (guards against accidental/duplicate-glitch removals). */
+const DELETE_KEY = "DeleteMe";
 
 function seedIfEmpty(){
   if(!LS.get("init")){
@@ -665,7 +669,7 @@ function renderLedger(){
         <td class="amt dim">—</td>
         <td class="amt bal">${money(t.balance)}</td>
         <td><input type="checkbox" class="chk" ${st==="Paid"?"checked":""} onchange="togglePaid('${e.id}',this.checked)"/></td>
-        <td><button class="iconbtn" title="Adjust / add missing info" onclick="editExpense('${e.id}')">EDIT</button></td>`;
+        <td><button class="iconbtn" title="Adjust / add missing info" onclick="editExpense('${e.id}')">EDIT</button><button class="iconbtn danger" title="Delete this row (requires key)" onclick="delExpense(${DB.expenses.indexOf(e)})">DEL</button></td>`;
       body.appendChild(tr);
     } else {
       const d=t.d;
@@ -693,8 +697,15 @@ function togglePaid(id,on){
   else{ e.reimbursed=0; e.status="Submitted"; e.dateReimbursed=null; }
   save(); renderAll();
 }
-function delExpense(id){ if(!confirm("Delete expense "+id+"?"))return;
-  DB.expenses=DB.expenses.filter(e=>e.id!==id); save(); renderAll(); toast("Deleted "+id); }
+function delExpense(idx){
+  const e=DB.expenses[idx];
+  if(!e){ toast("Row not found — refresh and try again"); return; }
+  const key=prompt(`Delete ${e.id} — ${esc(e.payee)} ${money(e.amount)} (${e.date})?\n\nThis removes ONLY this row. Enter the delete key to confirm:`);
+  if(key===null) return;                                  // user cancelled
+  if(key!==DELETE_KEY){ toast("Wrong delete key — nothing deleted"); return; }
+  DB.expenses.splice(idx,1);                              // remove exactly this row (safe with duplicate IDs)
+  save(); renderAll(); toast("Deleted "+e.id);
+}
 function attachReceipt(id){
   const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
   inp.style.cssText="position:fixed;left:-9999px;top:0"; document.body.appendChild(inp); // iOS needs it in the DOM
