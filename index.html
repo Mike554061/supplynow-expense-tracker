@@ -265,7 +265,9 @@ tr:hover td{background:rgba(31,214,220,.05)}
     <div id="tab-dash">
       <div class="mgrid" id="metricGrid"></div>
       <div class="section card hoverable" style="padding:18px">
-        <div class="section-head"><h2>Personal Money Outstanding</h2><div class="spacer"></div>
+        <div class="section-head"><h2>Personal Money Outstanding</h2>
+          <button class="iconbtn" id="reconcileBtn" title="Mark everything settled to date; new expenses accrue fresh" onclick="reconcileToggle()">Reconcile to $0</button>
+          <div class="spacer"></div>
           <div style="text-align:right"><div style="font-size:11px;color:var(--mut);letter-spacing:1px">RUNNING TOTAL OWED BACK</div>
           <div id="outstandingBig" style="font-size:56px;line-height:1;font-weight:900;letter-spacing:-1.5px;background:linear-gradient(180deg,#fff,var(--red));-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 38px rgba(240,168,120,.35)"></div></div>
         </div>
@@ -434,6 +436,7 @@ function seedIfEmpty(){
   } else {
     DB.users = LS.get("users",[]); DB.expenses = LS.get("expenses",[]); DB.deposits = LS.get("deposits",[]);
   }
+  DB.reconcile = LS.get("reconcile",null);
   DB.session = LS.get("session",null);
 }
 /* ================= LIVE BACKEND (Google Apps Script) ================= */
@@ -458,7 +461,7 @@ async function pushState(){
   PUSHING=true; setSyncPill("syncing");
   try{
     const c=cred();
-    await api("push",{email:c.email,pass:c.pass,state:{users:DB.users,expenses:DB.expenses,deposits:DB.deposits}});
+    await api("push",{email:c.email,pass:c.pass,state:{users:DB.users,expenses:DB.expenses,deposits:DB.deposits,reconcile:DB.reconcile||null}});
     if(!PUSH_QUEUED) DIRTY=false;   // local changes are now safely on the backend
     setSyncPill("live");
   }catch(e){ setSyncPill("error"); toast("Sync failed: "+e.message); }
@@ -471,8 +474,8 @@ async function pullState(silent){
   try{
     const j=await api("pull",{});
     if(DIRTY||PUSHING||BUSY) return;  // a local change landed while we were fetching — keep it
-    if(j.state){ DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[];
-      LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits);
+    if(j.state){ DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[]; DB.reconcile=j.state.reconcile||null;
+      LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits); LS.set("reconcile",DB.reconcile);
       renderAll(); setSyncPill("live"); if(!silent) toast("Synced from cloud"); }
   }catch(e){ setSyncPill("error"); if(!silent) toast("Sync failed: "+e.message); }
 }
@@ -484,7 +487,7 @@ function setSyncPill(state){
 }
 function syncNow(){ if(!online()){ toast("Not connected — open  Connect"); return; } pullState(false); }
 
-function save(){ if(online()) DIRTY=true; LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits); pushState(); }
+function save(){ if(online()) DIRTY=true; LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits); LS.set("reconcile",DB.reconcile||null); pushState(); }
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const money=n=>"$"+(+n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc=s=>(s||"").toString().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -509,8 +512,8 @@ async function doLogin(){
     $("#liErr").style.color="var(--cyan)"; $("#liErr").textContent="Connecting to cloud…";
     try{
       const j=await api("login",{email:em,pass:pw});
-      DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[];
-      LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits);
+      DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[]; DB.reconcile=j.state.reconcile||null;
+      LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits); LS.set("reconcile",DB.reconcile);
       LS.set("cred",{email:em,pass:pw});
       DB.session=em; LS.set("session",em); $("#liErr").style.color="var(--red)"; $("#liErr").textContent="";
       enterApp(); return;
@@ -641,12 +644,28 @@ async function saveExpense(){
 }
 
 /* ================= LEDGER ================= */
+/* ---- reconciliation anchor: everything through throughId is settled ($opening); only expenses
+   added after it accrue, less deposits dated after the reconcile date. No anchor => legacy behavior. */
+function expNum(id){ return parseInt(String(id||'').replace(/[^0-9]/g,''),10) || 0; }
+function recAnchor(){ return (DB.reconcile && +DB.reconcile.throughId) || 0; }
+function recOpening(){ return (DB.reconcile && +DB.reconcile.opening) || 0; }
+function recDate(){ return (DB.reconcile && DB.reconcile.date) || ""; }
 function buildRegister(){
+  const anchor=recAnchor(), rd=recDate();
   const tx=[];
   DB.expenses.forEach(e=>tx.push({kind:'expense',date:e.date,id:e.id,e,charge:+e.amount,credit:0}));
   DB.deposits.forEach(d=>tx.push({kind:'deposit',date:d.date,id:d.id,d,charge:0,credit:(d.confirmed?+d.amount:0)}));
   tx.sort((a,b)=>(a.date+(a.id||'')).localeCompare(b.date+(b.id||''))); // oldest ->newest
-  let bal=0; tx.forEach(t=>{ bal += t.charge - t.credit; t.balance=bal; });
+  let bal = anchor>0 ? recOpening() : 0;
+  tx.forEach(t=>{
+    if(anchor>0){
+      if(t.kind==='expense'){ if(expNum(t.e.id)>anchor) bal += owedOf(t.e); }          // only post-anchor expenses accrue
+      else if(t.d.confirmed && (!rd || t.d.date>rd)){ bal -= (+t.d.amount); }           // only deposits after the reconcile date reduce it
+    } else {
+      bal += t.charge - t.credit;                                                       // legacy: spent - deposits
+    }
+    t.balance=bal;
+  });
   return tx;
 }
 function renderLedger(){
@@ -794,6 +813,21 @@ function confirmDeposit(id,on){
 }
 function delDeposit(id){ if(!confirm("Remove this deposit?"))return;
   DB.deposits=DB.deposits.filter(x=>x.id!==id); save(); renderAll(); }
+/* Reconcile-to-zero: everything currently in the ledger is treated as settled; new expenses accrue fresh. Non-destructive + undoable. */
+function reconcileToZero(){
+  if(!isAdmin()){ toast("Only the owner can reconcile"); return; }
+  const maxId=DB.expenses.reduce((m,e)=>Math.max(m,expNum(e.id)),0);
+  const today=new Date().toISOString().slice(0,10);
+  if(!confirm("Reconcile to $0 as of today?\n\nEvery expense currently in the ledger is treated as settled through this point. Expenses you add AFTER this accrue fresh toward the balance. Nothing is deleted — you can undo it.")) return;
+  DB.reconcile={ throughId:maxId, opening:0, date:today };
+  save(); renderAll(); toast("Reconciled to $0 — new expenses accrue from here");
+}
+function clearReconcile(){
+  if(!isAdmin()){ toast("Only the owner can change this"); return; }
+  if(!confirm("Remove the reconcile checkpoint?\n\nBalance goes back to (all expenses − all deposits).")) return;
+  DB.reconcile=null; save(); renderAll(); toast("Reconcile checkpoint cleared");
+}
+function reconcileToggle(){ if(recAnchor()>0) clearReconcile(); else reconcileToZero(); }
 
 /* ================= METRICS ================= */
 function computeMetrics(){
@@ -801,9 +835,18 @@ function computeMetrics(){
   let all=0,ytd=0,open=0;
   DB.expenses.forEach(e=>{ all+=+e.amount; if(new Date(e.date).getFullYear()===yr) ytd+=+e.amount; if(statusOf(e)!=="Paid") open++; });
   const reimb=DB.deposits.filter(d=>d.confirmed).reduce((s,d)=>s+(+d.amount),0); // deposits = money paid back, like a bank credit
-  const unpaid=all-reimb;
+  const anchor=recAnchor(), rd=recDate();
+  let unpaid;
+  if(anchor>0){
+    // reconciled baseline: through the anchor is settled ($opening); only post-anchor expenses stand, less deposits after the reconcile date
+    const owedAfter=DB.expenses.filter(e=>expNum(e.id)>anchor).reduce((s,e)=>s+owedOf(e),0);
+    const depAfter=DB.deposits.filter(d=>d.confirmed && (!rd || d.date>rd)).reduce((s,d)=>s+(+d.amount),0);
+    unpaid=recOpening()+owedAfter-depAfter;
+  } else {
+    unpaid=all-reimb;
+  }
   const feesFromPayroll=DB.deposits.filter(d=>d.isPayroll).reduce((s,d)=>s+(+d.fee||0),0);
-  return { all,ytd,reimb,unpaid,open, outstanding:unpaid, fees:FEES_BASELINE+feesFromPayroll, feesFromPayroll };
+  return { all,ytd,reimb,unpaid,open, outstanding:unpaid, fees:FEES_BASELINE+feesFromPayroll, feesFromPayroll, anchor };
 }
 function renderMetrics(){
   const m=computeMetrics();
@@ -821,6 +864,7 @@ function renderMetrics(){
       <div class="val">${c.val}</div><div class="sub">${c.sub}</div>
     </div>`).join("");
   $("#outstandingBig").textContent=money(m.outstanding);
+  const rb=$("#reconcileBtn"); if(rb) rb.textContent = m.anchor>0 ? "Reconciled ✓ · undo" : "Reconcile to $0";
   const byCC={}; DB.expenses.forEach(e=>{byCC[e.cc]=(byCC[e.cc]||0)+(+e.amount);});
   const seg=Object.entries(byCC).sort((a,b)=>b[1]-a[1]);
   $("#outstandingBar").innerHTML = seg.length
@@ -905,7 +949,7 @@ async function saveConnect(){
   const u=$("#cxUrl").value.trim(); if(!u){ toast("Paste the URL"); return; }
   LS.set("endpoint",u);
   try{ const c=cred(); const j=await api("login",{email:c.email,pass:c.pass});
-    if(j.state){ DB.users=j.state.users; DB.expenses=j.state.expenses; DB.deposits=j.state.deposits; save(); } }catch(e){}
+    if(j.state){ DB.users=j.state.users; DB.expenses=j.state.expenses; DB.deposits=j.state.deposits; DB.reconcile=j.state.reconcile||null; save(); } }catch(e){}
   closeModal(); toast(" Live cloud storage on"); location.reload();
 }
 
