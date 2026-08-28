@@ -239,7 +239,7 @@ tr:hover td{background:rgba(31,214,220,.05)}
   <header>
     <div class="brand">
       <div class="logo"><svg viewBox="0 0 40 40" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 3 L35 20 L20 37 L5 20 Z"/><path d="M20 12 L28 20 L20 28 L12 20 Z" stroke="var(--violet)"/></svg></div>
-      <div><h1>Personal Expense Tool</h1><div class="sub">Baseline $0 at last week's deposit · everything since is owed until you tick it paid</div></div>
+      <div><h1>Personal Expense Tool</h1><div class="sub">Expenses · Receipts · Payouts</div></div>
     </div>
     <div class="spacer"></div>
     <div class="who">Signed in as <b id="whoName">—</b><br/><span class="badge" id="whoRole">member</span></div>
@@ -266,7 +266,7 @@ tr:hover td{background:rgba(31,214,220,.05)}
       <div class="mgrid" id="metricGrid"></div>
       <div class="section card hoverable" style="padding:18px">
         <div class="section-head"><h2>Personal Money Outstanding</h2><div class="spacer"></div>
-          <div style="text-align:right"><div style="font-size:11px;color:var(--mut);letter-spacing:1px">OWED SINCE LAST DEPOSIT</div>
+          <div style="text-align:right"><div style="font-size:11px;color:var(--mut);letter-spacing:1px">RUNNING TOTAL OWED BACK</div>
           <div id="outstandingBig" style="font-size:56px;line-height:1;font-weight:900;letter-spacing:-1.5px;background:linear-gradient(180deg,#fff,var(--red));-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 38px rgba(240,168,120,.35)"></div></div>
         </div>
         <div id="outstandingBar"></div>
@@ -489,23 +489,15 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const money=n=>"$"+(+n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc=s=>(s||"").toString().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2200)}
-/* BASELINE — last week's deposit is the $0 starting point. Every expense that existed then (id up to
-   BASELINE_ID) is Settled and never counts as owed. Anything added since — even backdated — is Owed
-   until you tick its Paid box. */
-const BASELINE_ID = 41;
-function expNum(id){ return parseInt(String(id||'').replace(/[^0-9]/g,''),10) || 0; }
-function isSettled(e){ return expNum(e.id) <= BASELINE_ID; }
-const owedOf=e=> isSettled(e) ? 0 : Math.max(0,(+e.amount||0)-(+e.reimbursed||0));
+const owedOf=e=>Math.max(0,(+e.amount)-(+e.reimbursed||0));
 function receiptSrc(e){ return e.img || e.imgThumb || (e.receiptFileId? "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w600" : null); }
 function receiptView(e){ if(e.receiptFileId) return "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w1600"; return e.img||e.imgThumb||null; }
 function hasReceipt(e){ return !!(e.img||e.imgThumb||e.receiptFileId); }
 function rcptFallback(img,id){ img.outerHTML='<div class="thumb rcpt" title="Receipt attached" onclick="lightbox(\''+id+'\')">RCPT</div>'; }
-function statusOf(e){ if(isSettled(e)) return "Settled";
-  const amt=+e.amount||0, r=+e.reimbursed||0;
-  if(amt<=0) return "—";
-  if(r>=amt-0.005) return "Paid";
-  if(r>0) return "Partial";
-  return "Owed"; }
+function statusOf(e){ if(e.status==="Not Submitted")return "Not Submitted";
+  if((+e.reimbursed||0)>=(+e.amount))return "Paid";
+  if((+e.reimbursed||0)>0)return "Partial";
+  return e.status||"Submitted"; }
 
 /* ================= AUTH ================= */
 function currentUser(){ return DB.users.find(u=>u.email===DB.session)||null; }
@@ -677,7 +669,7 @@ function renderLedger(){
         <td class="amt charge">${money(e.amount)}</td>
         <td class="amt dim">—</td>
         <td class="amt bal">${money(t.balance)}</td>
-        <td>${isSettled(e)?`<span style="color:#88969a;font-size:11px;border:1px solid #3a4a4d;border-radius:20px;padding:2px 8px">settled</span>`:`<input type="checkbox" class="chk" title="Tick when this has been paid back" ${(+e.reimbursed||0)>=(+e.amount)?"checked":""} onchange="togglePaid('${e.id}',this.checked)"/>`}</td>
+        <td><input type="checkbox" class="chk" ${st==="Paid"?"checked":""} onchange="togglePaid('${e.id}',this.checked)"/></td>
         <td><button class="iconbtn" title="Adjust / add missing info" onclick="editExpense('${e.id}')">EDIT</button><button class="iconbtn danger" title="Delete this row (requires key)" onclick="delExpense(${DB.expenses.indexOf(e)})">DEL</button></td>`;
       body.appendChild(tr);
     } else {
@@ -808,22 +800,21 @@ function delDeposit(id){ if(!confirm("Remove this deposit?"))return;
 function computeMetrics(){
   // Checkbox-driven: an expense is paid when its Paid box is checked. Balance = sum of unchecked (owed).
   const yr=new Date().getFullYear();
-  let all=0,ytd=0,open=0,unpaid=0,sinceSpent=0,sinceReimb=0;
+  let all=0,ytd=0,open=0,unpaid=0,reimb=0;
   DB.expenses.forEach(e=>{ const a=+e.amount||0; all+=a; if(new Date(e.date).getFullYear()===yr) ytd+=a;
-    const o=owedOf(e); unpaid+=o;
-    if(!isSettled(e)){ sinceSpent+=a; sinceReimb+=Math.min(a,(+e.reimbursed||0)); if(o>0.005) open++; } });
+    const o=owedOf(e); unpaid+=o; reimb+=Math.min(a,(+e.reimbursed||0)); if(o>0.005) open++; });
   const deposits=DB.deposits.filter(d=>d.confirmed).reduce((s,d)=>s+(+d.amount||0),0);
   const feesFromPayroll=DB.deposits.filter(d=>d.isPayroll).reduce((s,d)=>s+(+d.fee||0),0);
-  return { all,ytd,sinceSpent,sinceReimb,deposits,unpaid,open, outstanding:unpaid, fees:FEES_BASELINE+feesFromPayroll, feesFromPayroll };
+  return { all,ytd,reimb,deposits,unpaid,open, outstanding:unpaid, fees:FEES_BASELINE+feesFromPayroll, feesFromPayroll };
 }
 function renderMetrics(){
   const m=computeMetrics();
   const cards=[
-    {lab:"Owed Since Baseline",val:money(m.unpaid),sub:"added since last deposit · not yet paid",ic:"",cls:"accent-red"},
-    {lab:"Added Since Baseline",val:money(m.sinceSpent),sub:"new expenses after last deposit",ic:"",cls:""},
-    {lab:"Marked Paid",val:money(m.sinceReimb),sub:"ticked off · Added − Paid = Owed",ic:"",cls:"accent-green"},
-    {lab:"Open Items",val:m.open,sub:"since baseline · not ticked paid",ic:"",cls:""},
-    {lab:"Total Logged (lifetime)",val:money(m.all),sub:"all expenses ever, incl. settled",ic:"",cls:""},
+    {lab:"Total Personal Spent",val:money(m.all),sub:"all logged expenses",ic:"",cls:""},
+    {lab:"Expense YTD",val:money(m.ytd),sub:new Date().getFullYear()+" to date",ic:"",cls:""},
+    {lab:"Total Reimbursed",val:money(m.reimb),sub:"checked off as paid",ic:"",cls:"accent-green"},
+    {lab:"Total Unpaid",val:money(m.unpaid),sub:"owed to you · unchecked",ic:"",cls:"accent-red"},
+    {lab:"Open Expenses",val:m.open,sub:"not marked paid",ic:"",cls:""},
     {lab:"Transfer Fees",val:money(m.fees),sub:"payroll + money sent to people",ic:"",cls:"accent-amber"},
   ];
   $("#metricGrid").innerHTML=cards.map(c=>`
