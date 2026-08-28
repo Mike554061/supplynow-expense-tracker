@@ -314,7 +314,7 @@ tr:hover td{background:rgba(31,214,220,.05)}
     <div id="tab-ledger" class="hidden">
       <div class="card" style="padding:16px 16px 6px">
         <div class="section-head">
-          <h2>Ledger</h2><span class="hint">every expense &amp; deposit · running balance owed · newest on top, oldest at the bottom</span>
+          <h2>Ledger</h2><span class="hint" id="postedStat">every expense &amp; deposit · newest on top</span>
           <div class="spacer"></div>
           <input id="search" placeholder=" search…" style="max-width:280px" oninput="renderLedger()"/>
         </div>
@@ -490,6 +490,18 @@ const money=n=>"$"+(+n||0).toLocaleString(undefined,{minimumFractionDigits:2,max
 const esc=s=>(s||"").toString().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2200)}
 const owedOf=e=>Math.max(0,(+e.amount)-(+e.reimbursed||0));
+/* POST TIMESTAMP — when an expense was entered (not the receipt's date). New entries store createdAt;
+   older ones are backfilled from the real receipt-upload batches in Drive. */
+function expNum(id){ return parseInt(String(id||'').replace(/[^0-9]/g,''),10)||0; }
+function backfillPostDate(e){ const n=expNum(e.id);
+  if(n>=61) return '2026-08-27'; if(n>=39) return '2026-08-21'; if(n>=16) return '2026-08-17'; return '2026-08-08'; }
+function postedISO(e){ return e.createdAt || (backfillPostDate(e)+'T12:00:00'); }
+function postedDay(e){ return postedISO(e).slice(0,10); }
+function postedLabel(e){ const d=new Date(postedISO(e));
+  const day=d.toLocaleDateString(undefined,{month:'numeric',day:'numeric'});
+  return e.createdAt ? day+' '+d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}) : day; }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function yesterdayStr(){ const d=new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); }
 function receiptSrc(e){ return e.img || e.imgThumb || (e.receiptFileId? "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w600" : null); }
 function receiptView(e){ if(e.receiptFileId) return "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w1600"; return e.img||e.imgThumb||null; }
 function hasReceipt(e){ return !!(e.img||e.imgThumb||e.receiptFileId); }
@@ -625,7 +637,8 @@ async function saveExpense(){
   const e={ id:nextId(), date:$("#fDate").value||new Date().toISOString().slice(0,10),
     payee:$("#fPayee").value.trim()||"—", cc:$("#fCC").value, amount, reimbursed:0,
     method:$("#fMethod").value, ref:$("#fRef").value.trim(), notes:$("#fNotes").value.trim(),
-    status:$("#fStatus").value, img:null, receiptFileId:null, dateReimbursed:null, createdBy:DB.session };
+    status:$("#fStatus").value, img:null, receiptFileId:null, dateReimbursed:null, createdBy:DB.session,
+    createdAt:new Date().toISOString() };
   if(e.status==="Paid"){ e.reimbursed=amount; e.dateReimbursed=e.date; }
   BUSY=true;
   if(pendingImg){
@@ -663,7 +676,7 @@ function renderLedger(){
       tr.innerHTML=`
         <td>${hasReceipt(e)?`<img class="thumb" src="${receiptSrc(e)}" onclick="lightbox('${e.id}')" onerror="rcptFallback(this,'${e.id}')"/>`
           :`<div class="thumb empty" title="Add receipt" onclick="attachReceipt('${e.id}')">+</div>`}</td>
-        <td style="white-space:nowrap">${e.date}<div class="sub-id">${e.id}</div></td>
+        <td style="white-space:nowrap">${e.date}<div class="sub-id">${e.id}</div><div class="sub-id" style="color:#4bd6c8">posted ${postedLabel(e)}</div></td>
         <td>${esc(e.payee)}${e.notes?`<div class="sub-id">${esc(e.notes)}</div>`:""}</td>
         <td><span class="cc-tag">${esc(e.cc)}</span></td>
         <td class="amt charge">${money(e.amount)}</td>
@@ -691,6 +704,9 @@ function renderLedger(){
     }
   });
   if(!shown) body.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--dim);padding:26px">Nothing to show.</td></tr>`;
+  const td=todayStr(), yd=yesterdayStr();
+  const nToday=DB.expenses.filter(e=>postedDay(e)===td).length, nYest=DB.expenses.filter(e=>postedDay(e)===yd).length;
+  const st=$("#postedStat"); if(st) st.innerHTML=`posted <b style="color:#4bd6c8">today ${nToday}</b> · <b style="color:#4bd6c8">yesterday ${nYest}</b> · ${DB.expenses.length} total`;
 }
 function togglePaid(id,on){
   const e=DB.expenses.find(x=>x.id===id); if(!e)return;
