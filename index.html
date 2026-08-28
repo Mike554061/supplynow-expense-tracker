@@ -436,6 +436,7 @@ function seedIfEmpty(){
   } else {
     DB.users = LS.get("users",[]); DB.expenses = LS.get("expenses",[]); DB.deposits = LS.get("deposits",[]);
   }
+  DB.reconcile = LS.get("reconcile",null);
   DB.session = LS.get("session",null);
 }
 /* ================= LIVE BACKEND (Google Apps Script) ================= */
@@ -460,7 +461,7 @@ async function pushState(){
   PUSHING=true; setSyncPill("syncing");
   try{
     const c=cred();
-    await api("push",{email:c.email,pass:c.pass,state:{users:DB.users,expenses:DB.expenses,deposits:DB.deposits}});
+    await api("push",{email:c.email,pass:c.pass,state:{users:DB.users,expenses:DB.expenses,deposits:DB.deposits,reconcile:DB.reconcile||null}});
     if(!PUSH_QUEUED) DIRTY=false;   // local changes are now safely on the backend
     setSyncPill("live");
   }catch(e){ setSyncPill("error"); toast("Sync failed: "+e.message); }
@@ -473,8 +474,8 @@ async function pullState(silent){
   try{
     const j=await api("pull",{});
     if(DIRTY||PUSHING||BUSY) return;  // a local change landed while we were fetching — keep it
-    if(j.state){ DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[];
-      LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits);
+    if(j.state){ DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[]; DB.reconcile=j.state.reconcile||null;
+      LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits); LS.set("reconcile",DB.reconcile);
       renderAll(); setSyncPill("live"); if(!silent) toast("Synced from cloud"); }
   }catch(e){ setSyncPill("error"); if(!silent) toast("Sync failed: "+e.message); }
 }
@@ -486,7 +487,7 @@ function setSyncPill(state){
 }
 function syncNow(){ if(!online()){ toast("Not connected — open  Connect"); return; } pullState(false); }
 
-function save(){ if(online()) DIRTY=true; LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits); pushState(); }
+function save(){ if(online()) DIRTY=true; LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits); LS.set("reconcile",DB.reconcile||null); pushState(); }
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const money=n=>"$"+(+n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc=s=>(s||"").toString().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -511,8 +512,8 @@ async function doLogin(){
     $("#liErr").style.color="var(--cyan)"; $("#liErr").textContent="Connecting to cloud…";
     try{
       const j=await api("login",{email:em,pass:pw});
-      DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[];
-      LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits);
+      DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[]; DB.reconcile=j.state.reconcile||null;
+      LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits); LS.set("reconcile",DB.reconcile);
       LS.set("cred",{email:em,pass:pw});
       DB.session=em; LS.set("session",em); $("#liErr").style.color="var(--red)"; $("#liErr").textContent="";
       enterApp(); return;
@@ -948,7 +949,7 @@ async function saveConnect(){
   const u=$("#cxUrl").value.trim(); if(!u){ toast("Paste the URL"); return; }
   LS.set("endpoint",u);
   try{ const c=cred(); const j=await api("login",{email:c.email,pass:c.pass});
-    if(j.state){ DB.users=j.state.users; DB.expenses=j.state.expenses; DB.deposits=j.state.deposits; save(); } }catch(e){}
+    if(j.state){ DB.users=j.state.users; DB.expenses=j.state.expenses; DB.deposits=j.state.deposits; DB.reconcile=j.state.reconcile||null; save(); } }catch(e){}
   closeModal(); toast(" Live cloud storage on"); location.reload();
 }
 
