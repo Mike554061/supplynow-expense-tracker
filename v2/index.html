@@ -1,0 +1,987 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
+<title>Personal Expense Tool · v2</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23080d0e'/%3E%3Cpath d='M50 12 L86 50 L50 88 L14 50 Z' fill='none' stroke='%231fd6dc' stroke-width='7'/%3E%3Cpath d='M50 34 L66 50 L50 66 L34 50 Z' fill='none' stroke='%23D9B08C' stroke-width='6'/%3E%3C/svg%3E"/>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+:root{
+  --bg:#080d0e; --bg2:#0b1213; --panel:rgba(18,27,28,.72); --panel2:rgba(13,20,21,.6);
+  --line:rgba(25,211,217,.14); --line2:rgba(25,211,217,.32);
+  --txt:#dcece8; --mut:#87a49f; --dim:#587069;
+  --cyan:#1fd6dc; --blue:#159a9c; --violet:#D9B08C; --green:#3fd6c0; --amber:#FFCB9A; --red:#f0a878; --pink:#D9B08C;
+  --mint:#D1E8E2; --teal:#116466;
+  --glow:0 0 0 1px var(--line2), 0 8px 40px -10px rgba(17,100,102,.6), inset 0 1px 0 rgba(209,232,226,.05);
+  --radius:4px; --fs:14px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  color:var(--txt); font-size:var(--fs); line-height:1.45;
+  background:
+    radial-gradient(1200px 760px at 12% -8%, rgba(17,100,102,.28), transparent 60%),
+    radial-gradient(1000px 620px at 108% 4%, rgba(31,214,220,.12), transparent 55%),
+    radial-gradient(900px 700px at 50% 122%, rgba(217,176,140,.08), transparent 60%),
+    linear-gradient(180deg,var(--bg),var(--bg2));
+  background-attachment:fixed; min-height:100vh;
+}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.4;
+  background-image:linear-gradient(rgba(25,211,217,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(25,211,217,.035) 1px,transparent 1px);
+  background-size:52px 52px;mask-image:radial-gradient(circle at 50% 30%,#000,transparent 85%)}
+a{color:var(--cyan);text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:13px;color:var(--txt);
+  background:rgba(6,11,11,.7);border:1px solid var(--line);border-radius:3px;padding:9px 11px;width:100%;outline:none;transition:.15s}
+input:focus,select:focus,textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(31,214,220,.16)}
+select option{background:#0b1213}
+::-webkit-scrollbar{height:9px;width:9px}
+::-webkit-scrollbar-thumb{background:rgba(25,211,217,.25);border-radius:9px}
+.hidden{display:none!important}
+h1,h2,h3,.tab,.btn,th,.lab,.badge,.brand h1{letter-spacing:.14em}
+
+/* ---------- edgy glass card / glow ---------- */
+.card{background:linear-gradient(180deg,var(--panel),var(--panel2));
+  border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--glow); backdrop-filter:blur(14px) saturate(1.2);
+  position:relative; transition:transform .28s cubic-bezier(.2,.7,.2,1), box-shadow .28s, border-color .28s;
+  transform-style:preserve-3d;}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(360px circle at var(--mx,50%) var(--my,0%), rgba(31,214,220,.14), transparent 55%);
+  opacity:0;transition:opacity .3s;}
+/* viewfinder corner brackets */
+.card.hoverable::after{content:"";position:absolute;inset:7px;pointer-events:none;border-radius:2px;opacity:.5;
+  background:
+    linear-gradient(var(--cyan),var(--cyan)) left top/14px 1px no-repeat,
+    linear-gradient(var(--cyan),var(--cyan)) left top/1px 14px no-repeat,
+    linear-gradient(var(--cyan),var(--cyan)) right top/14px 1px no-repeat,
+    linear-gradient(var(--cyan),var(--cyan)) right top/1px 14px no-repeat,
+    linear-gradient(var(--cyan),var(--cyan)) left bottom/14px 1px no-repeat,
+    linear-gradient(var(--cyan),var(--cyan)) left bottom/1px 14px no-repeat,
+    linear-gradient(var(--cyan),var(--cyan)) right bottom/14px 1px no-repeat,
+    linear-gradient(var(--cyan),var(--cyan)) right bottom/1px 14px no-repeat;
+  transition:opacity .3s;}
+.card.hoverable:hover{transform:translateY(-3px);
+  box-shadow:0 0 0 1px var(--line2),0 24px 60px -18px rgba(17,100,102,.75),0 0 42px -8px rgba(31,214,220,.4),inset 0 1px 0 rgba(209,232,226,.08);
+  border-color:var(--line2);}
+.card.hoverable:hover::after{opacity:1}
+.card.hoverable:hover::before{opacity:1}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:40;padding:14px clamp(14px,3vw,34px);
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  background:linear-gradient(180deg,rgba(6,11,11,.94),rgba(6,11,11,.55) 70%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:42px;height:42px;border-radius:3px;display:grid;place-items:center;color:var(--cyan);
+  background:linear-gradient(135deg,rgba(31,214,220,.14),rgba(217,176,140,.12));
+  border:1px solid var(--line2);box-shadow:0 0 22px -6px rgba(31,214,220,.8),inset 0 0 18px rgba(31,214,220,.14)}
+.brand h1{font-size:15px;margin:0;letter-spacing:.22em;font-weight:600;text-transform:uppercase;color:var(--mint)}
+.brand .sub{font-size:10px;color:var(--mut);letter-spacing:.28em;text-transform:uppercase}
+.spacer{flex:1}
+.who{font-size:12px;color:var(--mut);text-align:right;line-height:1.3}
+.who b{color:var(--txt)}
+.badge{display:inline-block;font-size:9px;letter-spacing:.14em;padding:2px 8px;border-radius:2px;
+  border:1px solid var(--line2);color:var(--cyan);text-transform:uppercase;margin-top:2px}
+.btn{border:1px solid var(--line2);background:linear-gradient(180deg,rgba(17,100,102,.22),rgba(17,100,102,.1));
+  color:var(--txt);padding:9px 15px;border-radius:2px;font-size:12px;font-weight:600;text-transform:uppercase;
+  transition:.18s;box-shadow:inset 0 1px 0 rgba(209,232,226,.06)}
+.btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px -10px rgba(31,214,220,.8),inset 0 1px 0 rgba(209,232,226,.1);border-color:var(--cyan);color:var(--mint)}
+.btn.primary{background:linear-gradient(135deg,var(--teal),var(--cyan));border-color:transparent;color:#04201f;font-weight:700}
+.btn.ghost{background:transparent}
+.btn.sm{padding:6px 11px;font-size:10.5px;letter-spacing:.1em}
+.btn.danger{background:linear-gradient(180deg,rgba(240,168,120,.24),rgba(200,110,60,.16));border-color:rgba(240,168,120,.5);color:var(--red)}
+.btn.good{background:linear-gradient(135deg,var(--teal),var(--green));color:#04201f;border-color:transparent;font-weight:700}
+
+/* ---------- layout ---------- */
+.wrap{padding:clamp(14px,2.4vw,30px);max-width:1500px;margin:0 auto;position:relative;z-index:1}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.tab{padding:9px 16px;border-radius:2px;border:1px solid var(--line);color:var(--mut);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.1em;
+  background:rgba(13,20,21,.5);transition:.18s}
+.tab:hover{color:var(--txt);border-color:var(--line2)}
+.tab.active{color:#04201f;border-color:transparent;background:linear-gradient(135deg,var(--teal),var(--cyan));box-shadow:0 8px 26px -12px rgba(31,214,220,.9)}
+
+/* ---------- metric grid ---------- */
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-bottom:22px}
+.metric{padding:16px 16px 15px;overflow:hidden}
+.metric .lab{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
+.metric .val{font-size:30px;font-weight:800;margin-top:10px;letter-spacing:-.5px;
+  background:linear-gradient(180deg,#fff,#a9d8cf);-webkit-background-clip:text;background-clip:text;color:transparent}
+.metric .sub{font-size:11px;color:var(--dim);margin-top:3px;letter-spacing:.02em}
+.metric.accent-red .val{background:linear-gradient(180deg,#fff,var(--red));-webkit-background-clip:text;background-clip:text;color:transparent}
+.metric.accent-green .val{background:linear-gradient(180deg,#fff,var(--green));-webkit-background-clip:text;background-clip:text;color:transparent}
+.metric.accent-amber .val{background:linear-gradient(180deg,#fff,var(--amber));-webkit-background-clip:text;background-clip:text;color:transparent}
+
+.section{margin-bottom:22px}
+.section-head{display:flex;align-items:center;gap:12px;margin:6px 2px 14px}
+.section-head h2{font-size:13px;margin:0;letter-spacing:.16em;text-transform:uppercase;font-weight:600;color:var(--mint)}
+.section-head .hint{font-size:12px;color:var(--dim)}
+.section-head .spacer{flex:1}
+
+/* ---------- table ---------- */
+.tablewrap{overflow-x:auto;border-radius:var(--radius)}
+table{border-collapse:separate;border-spacing:0;width:100%;min-width:940px}
+th{position:sticky;top:0;background:rgba(9,15,16,.97);backdrop-filter:blur(6px);text-align:left;
+  font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);padding:11px 12px;border-bottom:1px solid var(--line2);z-index:2}
+td{padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+tr:hover td{background:rgba(31,214,220,.05)}
+.sub-id{font-size:10px;color:var(--dim);letter-spacing:.03em;margin-top:2px}
+.thumb{width:44px;height:44px;border-radius:3px;object-fit:cover;border:1px solid var(--line2);cursor:pointer;
+  box-shadow:0 4px 14px -4px rgba(0,0,0,.6);transition:.2s}
+.thumb:hover{transform:scale(1.08);box-shadow:0 0 20px -2px rgba(31,214,220,.8)}
+.thumb.empty{display:grid;place-items:center;font-size:18px;font-weight:200;color:var(--cyan);background:rgba(13,20,21,.7);cursor:pointer}
+.thumb.rcpt{display:grid;place-items:center;font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--cyan);background:rgba(31,214,220,.12);border-color:var(--line2);cursor:pointer}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:2px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;border:1px solid}
+.st-Paid{color:var(--green);border-color:rgba(63,214,192,.45);background:rgba(63,214,192,.1)}
+.st-Submitted{color:var(--amber);border-color:rgba(255,203,154,.45);background:rgba(255,203,154,.1)}
+.st-NotSubmitted{color:var(--dim);border-color:var(--line2);background:rgba(25,211,217,.06)}
+.st-Partial{color:var(--cyan);border-color:rgba(31,214,220,.4);background:rgba(31,214,220,.1)}
+.cc-tag{font-size:11px;color:var(--txt);padding:2px 8px;border-radius:2px;background:rgba(31,214,220,.08);border:1px solid var(--line)}
+.cc-tag.credit{color:var(--green);border-color:rgba(63,214,192,.35);background:rgba(63,214,192,.08)}
+.amt{font-variant-numeric:tabular-nums;font-weight:700}
+.amt.dim{color:var(--dim);font-weight:400}
+.amt.charge{color:var(--red)}
+.amt.credit{color:var(--green)}
+.amt.bal{color:var(--mint);font-weight:800}
+.owed{color:var(--red)}
+.credit-mark{color:var(--green);font-weight:700;font-size:11px;letter-spacing:.12em;text-align:center}
+.deprow-line td{background:rgba(63,214,192,.05)}
+.pend{color:var(--amber);font-size:11px;letter-spacing:.04em}
+.chk{width:18px;height:18px;accent-color:var(--teal);cursor:pointer}
+.rowbtns{display:flex;gap:5px}
+.iconbtn{padding:5px 10px;border-radius:2px;border:1px solid var(--line);background:rgba(13,20,21,.6);
+  font-size:10px;letter-spacing:.12em;color:var(--mut);transition:.15s}
+.iconbtn:hover{color:var(--cyan);border-color:var(--cyan);transform:translateY(-1px)}
+.iconbtn.danger{margin-left:4px}
+.iconbtn.danger:hover{color:#ff6b6b;border-color:#ff6b6b}
+
+/* ---------- form / intake ---------- */
+.grid2{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}
+.field{margin-bottom:11px}
+.field label{display:block;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--mut);margin-bottom:5px}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.drop{border:1.5px dashed var(--line2);border-radius:14px;padding:22px 16px;text-align:center;cursor:pointer;transition:.2s;
+  background:radial-gradient(180px circle at 50% 0%,rgba(31,214,220,.1),transparent)}
+.drop:hover,.drop.drag{border-color:var(--cyan);background:radial-gradient(220px circle at 50% 0%,rgba(63,240,255,.18),transparent);transform:translateY(-2px)}
+.drop .big{font-size:30px}
+.ocrstat{font-size:12px;color:var(--cyan);margin-top:8px;min-height:16px}
+.preview{margin-top:12px;border-radius:12px;overflow:hidden;border:1px solid var(--line2);position:relative}
+.preview img{width:100%;display:block;max-height:260px;object-fit:contain;background:#03060e}
+
+/* ---------- P&L bars ---------- */
+.gl{display:flex;flex-direction:column;gap:9px}
+.glrow{display:grid;grid-template-columns:170px 1fr 86px;align-items:center;gap:12px}
+.glbar{height:12px;border-radius:20px;background:rgba(31,214,220,.09);overflow:hidden;position:relative}
+.glbar >i{display:block;height:100%;border-radius:20px;background:linear-gradient(90deg,var(--blue),var(--violet),var(--pink));
+  box-shadow:0 0 14px -2px rgba(217,176,140,.8)}
+.glname{font-size:12.5px;color:var(--txt)}
+.glval{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;font-size:13px}
+
+/* ---------- YTD list ---------- */
+.ytd{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:11px}
+.ytd .box{padding:13px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(15,20,40,.5)}
+.ytd .m{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}
+.ytd .b{font-size:19px;font-weight:800;margin-top:4px}
+
+/* ---------- deposits ---------- */
+.deprow{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(15,20,40,.45);margin-bottom:10px}
+.deprow.pending{border-color:rgba(255,193,94,.4)}
+.deprow.confirmed{border-color:rgba(55,245,163,.35)}
+.dep-meta{font-size:12px;color:var(--mut)}
+.dep-amt{font-size:18px;font-weight:800}
+
+/* ---------- modal / lightbox ---------- */
+.overlay{position:fixed;inset:0;z-index:100;background:rgba(3,5,12,.78);backdrop-filter:blur(8px);display:grid;place-items:center;padding:18px}
+.modal{width:min(640px,96vw);max-height:92vh;overflow:auto;padding:22px}
+.modal h3{margin:0 0 4px}
+.modal .close{position:absolute;top:12px;right:14px}
+.lightbox img{max-width:94vw;max-height:88vh;border-radius:14px;box-shadow:0 0 60px -6px rgba(31,214,220,.6)}
+
+/* ---------- login ---------- */
+.loginwrap{min-height:100vh;display:grid;place-items:center;padding:20px}
+.loginbox{width:min(400px,94vw);padding:30px 26px;text-align:center}
+.loginbox .logo{width:60px;height:60px;font-size:30px;margin:0 auto 16px}
+.loginbox h2{margin:0 0 4px;font-size:20px}
+.loginbox p{color:var(--mut);font-size:13px;margin:0 0 22px}
+.err{color:var(--red);font-size:12.5px;min-height:16px;margin-top:8px}
+.tiny{font-size:11px;color:var(--dim);margin-top:16px;line-height:1.5}
+
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);z-index:200;
+  padding:11px 20px;border-radius:2px;background:linear-gradient(135deg,var(--teal),var(--cyan));color:#04201f;font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+  box-shadow:0 14px 40px -10px rgba(31,214,220,.8);opacity:0;transition:.3s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.checkline{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--mut);padding:6px 0;border-bottom:1px solid var(--line)}
+.checkline:last-child{border:none}
+.allocamt{width:90px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}.who{display:none}}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="loginView" class="loginwrap">
+  <div class="card hoverable loginbox" id="loginCard">
+    <h2>Sign in to continue</h2>
+    <div class="field"><input id="liEmail" type="email" placeholder="Email" autocomplete="username"/></div>
+    <div class="field"><input id="liPass" type="password" placeholder="Password" autocomplete="current-password"/></div>
+    <button class="btn primary" style="width:100%" onclick="doLogin()">Sign In</button>
+    <div class="err" id="liErr"></div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="appView" class="hidden">
+  <header>
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 40 40" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 3 L35 20 L20 37 L5 20 Z"/><path d="M20 12 L28 20 L20 28 L12 20 Z" stroke="var(--violet)"/></svg></div>
+      <div><h1>Personal Expense Tool <span style="font-size:12px;color:#37d67a;border:1px solid #37d67a;border-radius:20px;padding:2px 9px;vertical-align:middle;letter-spacing:.08em">v2 · ALLOCATION</span></h1><div class="sub">Deposits applied to expenses · totals always tie</div></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="who">Signed in as <b id="whoName">—</b><br/><span class="badge" id="whoRole">member</span></div>
+    <span id="syncPill" class="badge" style="cursor:default"></span>
+    <button class="btn ghost sm" onclick="syncNow()" id="syncBtn">Sync</button>
+    <button class="btn ghost sm" onclick="openConnect()" id="connectBtn">Connect</button>
+    <button class="btn ghost sm" onclick="openMatch()" id="matchBtn">Drive Match</button>
+    <button class="btn ghost sm" onclick="openUsers()" id="usersBtn">Users</button>
+    <button class="btn ghost sm" onclick="exportData()">Backup</button>
+    <button class="btn ghost sm" onclick="logout()">Sign out</button>
+  </header>
+
+  <div class="wrap">
+    <div class="tabs">
+      <button class="tab active" data-tab="dash" onclick="switchTab('dash')">Dashboard</button>
+      <button class="tab" data-tab="add" onclick="switchTab('add')">Add Expense</button>
+      <button class="tab" data-tab="ledger" onclick="switchTab('ledger')">Ledger</button>
+      <button class="tab" data-tab="deposits" onclick="switchTab('deposits')">Deposits &amp; Payroll</button>
+      <button class="tab" data-tab="pnl" onclick="switchTab('pnl')">P&amp;L / YTD</button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="tab-dash">
+      <div class="mgrid" id="metricGrid"></div>
+      <div class="section card hoverable" style="padding:18px">
+        <div class="section-head"><h2>Personal Money Outstanding</h2><div class="spacer"></div>
+          <div style="text-align:right"><div style="font-size:11px;color:var(--mut);letter-spacing:1px">RUNNING TOTAL OWED BACK</div>
+          <div id="outstandingBig" style="font-size:56px;line-height:1;font-weight:900;letter-spacing:-1.5px;background:linear-gradient(180deg,#fff,var(--red));-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 38px rgba(240,168,120,.35)"></div></div>
+        </div>
+        <div id="outstandingBar"></div>
+      </div>
+    </div>
+
+    <!-- ADD -->
+    <div id="tab-add" class="hidden">
+      <div class="grid2">
+        <div class="card hoverable" style="padding:20px">
+          <div class="section-head"><h2>Upload Receipt · Auto-OCR</h2></div>
+          <div class="drop" id="dropZone">
+            <div class="big" style="font-weight:200;letter-spacing:.3em;color:var(--cyan)">[ + ]</div>
+            <div style="margin-top:8px;font-weight:600">Tap to snap / choose a receipt</div>
+            <div style="font-size:12px;color:var(--dim);margin-top:4px">On-device OCR fills date, vendor &amp; amount automatically</div>
+            <input type="file" id="fileIn" accept="image/*" class="hidden"/>
+          </div>
+          <div class="ocrstat" id="ocrStat"></div>
+          <div class="preview hidden" id="previewWrap"><img id="previewImg" alt="receipt"/></div>
+        </div>
+
+        <div class="card hoverable" style="padding:20px">
+          <div class="section-head"><h2>Expense Details</h2><div class="spacer"></div><span class="hint">receipt optional</span></div>
+          <div class="frow">
+            <div class="field"><label>Expense Date</label><input type="date" id="fDate"/></div>
+            <div class="field"><label>Amount ($)</label><input type="number" step="0.01" id="fAmount" placeholder="0.00"/></div>
+          </div>
+          <div class="field"><label>Payee / Vendor</label><input id="fPayee" placeholder="e.g. Marathon, AutoZone, driver name"/></div>
+          <div class="frow">
+            <div class="field"><label>Cost Center</label><select id="fCC"></select></div>
+            <div class="field"><label>Payment Method</label>
+              <select id="fMethod"><option>Personal Credit</option><option>Apple Cash</option><option>Apple Card</option><option>Debit</option><option>Cash</option><option>Other</option></select></div>
+          </div>
+          <div class="field"><label>Notes / Description</label><textarea id="fNotes" rows="2" placeholder="Description, txn id, why…"></textarea></div>
+          <div class="frow">
+            <div class="field"><label>Status</label><select id="fStatus"><option>Not Submitted</option><option selected>Submitted</option><option>Paid</option></select></div>
+            <div class="field"><label>Receipt Ref</label><input id="fRef" placeholder="Apple Card txn / link"/></div>
+          </div>
+          <button class="btn primary" style="width:100%;margin-top:6px" onclick="saveExpense()">Save Expense to Ledger</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEDGER -->
+    <div id="tab-ledger" class="hidden">
+      <div class="card" style="padding:16px 16px 6px">
+        <div class="section-head">
+          <h2>Ledger</h2><span class="hint">every expense &amp; deposit · running balance owed · newest on top, oldest at the bottom</span>
+          <div class="spacer"></div>
+          <input id="search" placeholder=" search…" style="max-width:280px" oninput="renderLedger()"/>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr>
+              <th>Receipt</th><th>Date</th><th>Description</th><th>Cost Center</th><th>Amount</th><th>Reimbursed</th><th>Owed</th><th>Status</th><th></th>
+            </tr></thead>
+            <tbody id="ledgerBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- DEPOSITS -->
+    <div id="tab-deposits" class="hidden">
+      <div class="grid2">
+        <div class="card hoverable" style="padding:20px">
+          <div class="section-head"><h2>Log a Deposit / Reimbursement</h2></div>
+          <div class="frow">
+            <div class="field"><label>Date</label><input type="date" id="dDate"/></div>
+            <div class="field"><label>Amount ($)</label><input type="number" step="0.01" id="dAmount" placeholder="0.00"/></div>
+          </div>
+          <div class="frow">
+            <div class="field"><label>From</label><input id="dFrom" placeholder="Aaron / Company" value="Aaron"/></div>
+            <div class="field"><label>Method</label><select id="dMethod"><option>Apple Cash</option><option>Bank Transfer</option><option>Zelle</option><option>Check</option><option>Cash</option></select></div>
+          </div>
+          <div class="field"><label>Note</label><input id="dNote" placeholder="what this deposit covers"/></div>
+          <div style="font-size:11.5px;color:var(--dim);margin-bottom:10px">Apple Cash deposits from Aaron ≥ <b>$20,000</b>auto-flag as <b>bi-weekly payroll</b> (+$45 transfer fee).<br/>Anyone can log a deposit — only <b>Mike</b>confirms which expenses it clears.</div>
+          <button class="btn primary" style="width:100%" onclick="saveDeposit()">Log Deposit</button>
+        </div>
+        <div class="card hoverable" style="padding:20px">
+          <div class="section-head"><h2>Transfer Fees YTD</h2></div>
+          <div style="font-size:34px;font-weight:800;background:linear-gradient(180deg,#fff,#ffe0a6);-webkit-background-clip:text;background-clip:text;color:transparent" id="feesTotal"></div>
+          <div style="font-size:12px;color:var(--mut);margin-top:4px">Payroll + Expenditures · baseline $1,869.23 + $45 per detected payroll run</div>
+          <div id="feeBreak" style="margin-top:14px"></div>
+        </div>
+      </div>
+      <div class="section card" style="padding:18px;margin-top:18px">
+        <div class="section-head"><h2>Deposits Awaiting Confirmation</h2><span class="hint">once you confirm, the deposit posts to the Ledger as a credit — like a bank account</span></div>
+        <div id="depositList"></div>
+      </div>
+    </div>
+
+    <!-- PNL -->
+    <div id="tab-pnl" class="hidden">
+      <div class="section card hoverable" style="padding:20px">
+        <div class="section-head"><h2>P&amp;L — GL Cost Centers</h2><span class="hint">all logged expenses grouped by GL</span></div>
+        <div class="gl" id="glList"></div>
+      </div>
+      <div class="section card hoverable" style="padding:20px;margin-top:18px">
+        <div class="section-head"><h2>Previously Paid Expenses — YTD Balances</h2></div>
+        <div class="ytd" id="ytdList"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+<div class="toast" id="toast"></div>
+<div id="buildTag" style="position:fixed;bottom:6px;right:9px;z-index:5;font-size:9px;letter-spacing:.12em;color:var(--dim);opacity:.55;pointer-events:none">BUILD 10</div>
+
+<script>
+/* ================= CONFIG / SEED ================= */
+const COST_CENTERS = ["Fuel","Repairs & Maintenance","Vehicle Parts","Uniforms","Tolls","Parking","Vehicle Washes","Equipment","Office Supplies","Driver Advances","Cash Payouts","Meals","Lodging","Technology","Rental Expenses","Transfer Fees","Overdraft Fees","Other Work Expenses"];
+const PAYROLL_THRESHOLD = 20000, PAYROLL_FEE = 45, FEES_BASELINE = 1869.23;
+const ADMIN_EMAIL = "mike@supplynow.org";
+
+const SEED_USERS = [
+  {email:"mike@supplynow.org", pass:"Supplynow1!", name:"Mike", admin:true},
+  {email:"aaron@supplynow.org", pass:"Supplynow1!", name:"Aaron", admin:false}
+];
+const SEED_EXPENSES = [
+  ["R001","2026-07-21","Lakewood Hardware","Repairs & Maintenance",9.27,"Personal Credit","Apple Card","Recent unpaid item (Apple Card)."],
+  ["R002","2026-07-25","AutoZone","Vehicle Parts",18.98,"Personal Credit","Apple Card","Recent unpaid item (Apple Card)."],
+  ["R003","2026-07-27","Alex Cruz","Fuel",50,"Apple Cash","Apple Cash txn 0e9c594d76c2","RHO card declined"],
+  ["R004","2026-07-27","Alex Cruz","Fuel",30,"Apple Cash","Apple Cash txn d89cf61b3f7c","RHO card declined"],
+  ["R005","2026-07-27","Daniel Hernandez","Fuel",80,"Apple Cash","Apple Cash txn 67f4c12a1f7a","Fuel advance"],
+  ["R006","2026-07-27","Daniel Hernandez","Fuel",80,"Apple Cash","Apple Cash txn 482068e31fcc","Fuel advance"],
+  ["R007","2026-07-27","Alex Cruz","Fuel",75,"Apple Cash","Apple Cash txn cd2894d731f3","RHO card declined"],
+  ["R008","2026-07-28","Damonte Smiley","Fuel",80,"Apple Cash","Apple Cash txn b357d9a860b7","Fuel advance"],
+  ["R009","2026-07-29","Shameria New","Fuel",50,"Apple Cash","Apple Cash txn 8fce7ab79e34","Fuel advance"],
+  ["R010","2026-07-31","Alex Cruz","Fuel",50,"Apple Cash","Apple Cash txn adf25192861d","Card declined"],
+  ["R011","2026-07-31","AutoZone","Vehicle Parts",51.83,"Personal Credit","Apple Card txn D8F89AE7AC70","Recent unpaid item"],
+  ["R012","2026-07-31","Lakewood Hardware","Repairs & Maintenance",21.08,"Personal Credit","Apple Card txn 258211CA2263","Recent unpaid item"],
+  ["R013","2026-08-03","Daniel Hernandez","Fuel",65,"Apple Cash","","Gas card declined"],
+  ["R014","2026-08-03","Marathon","Fuel",150,"Personal Credit","Apple Card — PENDING","Fuel (pending)"],
+  ["R015","2026-08-04","Alex Cruz","Fuel",90,"Apple Cash","Apple Cash txn 9c2e040b901a","Fuel card declining"]
+];
+const SEED_YTD = [
+  ["January 31, 2026",3502.55],["February 28, 2026",2805.25],["March 31, 2026",152.96],
+  ["April 30, 2026",686.28],["May 31, 2026",1123.13],["June 30, 2026",1010.08],
+  ["July 31, 2026",2604.75],["August 5, 2026",901.26]
+];
+
+/* ================= STORE ================= */
+const LS = {
+  get:(k,d)=>{try{return JSON.parse(localStorage.getItem("snx_"+k))??d}catch(e){return d}},
+  set:(k,v)=>localStorage.setItem("snx_"+k,JSON.stringify(v))
+};
+let DB = { users:[], expenses:[], deposits:[], session:null };
+/* Key required to delete a ledger row (guards against accidental/duplicate-glitch removals). */
+const DELETE_KEY = "DeleteMe";
+
+function seedIfEmpty(){
+  if(!LS.get("init")){
+    DB.users = SEED_USERS.map(u=>({...u}));
+    DB.expenses = SEED_EXPENSES.map(r=>({
+      id:r[0], date:r[1], payee:r[2], cc:r[3], amount:+r[4], reimbursed:0,
+      method:r[5], ref:r[6], notes:r[7], status:"Submitted", img:null,
+      dateReimbursed:null, createdBy:"seed"
+    }));
+    DB.deposits = [];
+    LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits);
+    LS.set("init",true);
+  } else {
+    DB.users = LS.get("users",[]); DB.expenses = LS.get("expenses",[]); DB.deposits = LS.get("deposits",[]);
+  }
+  DB.session = LS.get("session",null);
+}
+/* ================= LIVE BACKEND (Google Apps Script) ================= */
+/* Paste your deployed /exec Web-app URL here to make it zero-config for
+   every user & device. Leave "" to configure in-app via  Connect. */
+const HARDCODED_BACKEND = "https://script.google.com/macros/s/AKfycbwLLwmzN-M3HlvpF9VBerYeVSfYZOMGno-zLwzTwYsJsaux7fd0d4AXYkhpag05gypJJg/exec";
+function endpoint(){ return (HARDCODED_BACKEND || LS.get("endpoint","") || "").trim(); }
+function online(){ return !!endpoint(); }
+function cred(){ return LS.get("cred",{}); }
+async function api(action,data){
+  const url=endpoint(); if(!url) throw new Error("No backend connected");
+  const res=await fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body:JSON.stringify(Object.assign({action},data||{}))});
+  const j=await res.json();
+  if(j&&j.ok===false) throw new Error(j.error||"backend error");
+  return j;
+}
+let PUSHING=false, PUSH_QUEUED=false, POLL=null, DIRTY=false, BUSY=false;
+async function pushState(){
+  if(!online()) return;
+  if(PUSHING){ PUSH_QUEUED=true; return; }
+  PUSHING=true; setSyncPill("syncing");
+  try{
+    const c=cred();
+    await api("push",{email:c.email,pass:c.pass,state:{users:DB.users,expenses:DB.expenses,deposits:DB.deposits}});
+    if(!PUSH_QUEUED) DIRTY=false;   // local changes are now safely on the backend
+    setSyncPill("live");
+  }catch(e){ setSyncPill("error"); toast("Sync failed: "+e.message); }
+  PUSHING=false;
+  if(PUSH_QUEUED){ PUSH_QUEUED=false; pushState(); }
+}
+async function pullState(silent){
+  // never overwrite local state while a write is pending/unsynced — that wipes just-added items
+  if(!online() || PUSHING || PUSH_QUEUED || DIRTY || BUSY) return;
+  try{
+    const j=await api("pull",{});
+    if(DIRTY||PUSHING||BUSY) return;  // a local change landed while we were fetching — keep it
+    if(j.state){ DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[];
+      LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits);
+      renderAll(); setSyncPill("live"); if(!silent) toast("Synced from cloud"); }
+  }catch(e){ setSyncPill("error"); if(!silent) toast("Sync failed: "+e.message); }
+}
+function setSyncPill(state){
+  const p=$("#syncPill"); if(!p)return;
+  if(!online()){ p.textContent="on-device"; p.style.color="var(--dim)"; p.style.borderColor="var(--line2)"; return; }
+  const map={live:["cloud · live","var(--green)"],syncing:["syncing…","var(--cyan)"],error:["sync error","var(--red)"]};
+  const m=map[state]||map.live; p.textContent=m[0]; p.style.color=m[1]; p.style.borderColor="currentColor";
+}
+function syncNow(){ if(!online()){ toast("Not connected — open  Connect"); return; } pullState(false); }
+
+function save(){ if(online()) DIRTY=true; LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits); pushState(); }
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const money=n=>"$"+(+n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>(s||"").toString().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2200)}
+/* ---- Reimbursement by ALLOCATION ----
+   Confirmed deposits form a pool that covers expenses oldest-first (FIFO).
+   Everything below is DERIVED each render, never stored — so Spent, Reimbursed and
+   Unpaid can never drift apart, and every row shows exactly what's covered. */
+let ALLOC={paid:new Map(),credit:0,pool:0};
+function allocation(){
+  const paid=new Map();
+  let pool=DB.deposits.filter(d=>d.confirmed).reduce((s,d)=>s+(+d.amount||0),0);
+  const total=pool;
+  DB.expenses.slice()
+    .sort((a,b)=>((a.date||'')+(a.id||'')).localeCompare((b.date||'')+(b.id||'')))  // oldest first
+    .forEach(e=>{ const amt=+e.amount||0; const pay=Math.max(0,Math.min(amt,pool)); paid.set(e,pay); pool-=pay; });
+  return {paid,credit:Math.max(0,pool),pool:total};
+}
+function recalcAlloc(){ ALLOC=allocation(); }
+function paidOf(e){ return ALLOC.paid.get(e)||0; }
+const owedOf=e=>Math.max(0,(+e.amount||0)-paidOf(e));
+function receiptSrc(e){ return e.img || e.imgThumb || (e.receiptFileId? "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w600" : null); }
+function receiptView(e){ if(e.receiptFileId) return "https://drive.google.com/thumbnail?id="+e.receiptFileId+"&sz=w1600"; return e.img||e.imgThumb||null; }
+function hasReceipt(e){ return !!(e.img||e.imgThumb||e.receiptFileId); }
+function rcptFallback(img,id){ img.outerHTML='<div class="thumb rcpt" title="Receipt attached" onclick="lightbox(\''+id+'\')">RCPT</div>'; }
+function statusOf(e){ const amt=+e.amount||0, p=paidOf(e);
+  if(amt<=0) return "—";
+  if(p>=amt-0.005) return "Paid";
+  if(p>0) return "Partial";
+  return "Unpaid"; }
+function statusPill(st){
+  const c={Paid:'#37d67a',Partial:'#f0a878',Unpaid:'#ff6b6b','Confirmed':'#37d67a','—':'#88969a'}[st]||'#88969a';
+  return `<span style="display:inline-block;padding:3px 10px;border:1px solid ${c};color:${c};border-radius:20px;font-size:11px;letter-spacing:.05em;white-space:nowrap">${st}</span>`;
+}
+
+/* ================= AUTH ================= */
+function currentUser(){ return DB.users.find(u=>u.email===DB.session)||null; }
+function isAdmin(){ const u=currentUser(); return u&&u.admin; }
+async function doLogin(){
+  const em=$("#liEmail").value.trim().toLowerCase(), pw=$("#liPass").value;
+  $("#liErr").textContent="";
+  if(online()){
+    $("#liErr").style.color="var(--cyan)"; $("#liErr").textContent="Connecting to cloud…";
+    try{
+      const j=await api("login",{email:em,pass:pw});
+      DB.users=j.state.users||DB.users; DB.expenses=j.state.expenses||[]; DB.deposits=j.state.deposits||[];
+      LS.set("users",DB.users); LS.set("expenses",DB.expenses); LS.set("deposits",DB.deposits);
+      LS.set("cred",{email:em,pass:pw});
+      DB.session=em; LS.set("session",em); $("#liErr").style.color="var(--red)"; $("#liErr").textContent="";
+      enterApp(); return;
+    }catch(e){ $("#liErr").style.color="var(--red)"; $("#liErr").textContent=e.message||"Login failed"; return; }
+  }
+  const u=DB.users.find(x=>x.email===em);
+  if(!u||u.pass!==pw){ $("#liErr").style.color="var(--red)"; $("#liErr").textContent="Invalid email or password."; return; }
+  DB.session=em; LS.set("session",em); LS.set("cred",{email:em,pass:pw}); enterApp();
+}
+function logout(){ DB.session=null; LS.set("session",null); location.reload(); }
+function enterApp(){
+  const u=currentUser();
+  $("#loginView").classList.add("hidden"); $("#appView").classList.remove("hidden");
+  $("#whoName").textContent=u.name+" · "+u.email;
+  $("#whoRole").textContent=u.admin?"admin · confirms deposits":"member";
+  $("#usersBtn").style.display=u.admin?"":"none";
+  $("#connectBtn").style.display=u.admin?"":"none";
+  $("#matchBtn").style.display=(u.admin&&online())?"":"none";
+  buildForm(); renderAll(); setSyncPill("live");
+  if(online()){ pullState(true);
+    if(POLL) clearInterval(POLL);
+    POLL=setInterval(()=>{ if(!document.hidden && !PUSHING && !BUSY && !DIRTY) pullState(true); }, 30000);
+  }
+}
+
+/* ================= FORM BUILD ================= */
+function buildForm(){
+  const cc=$("#fCC"); cc.innerHTML=COST_CENTERS.map(c=>`<option>${c}</option>`).join("");
+  $("#fDate").value=new Date().toISOString().slice(0,10);
+  $("#dDate").value=new Date().toISOString().slice(0,10);
+}
+
+/* ================= OCR ================= */
+let pendingImg=null;
+$("#fileIn")?.addEventListener("change",e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+function wireDrop(){
+  const dz=$("#dropZone"), fi=$("#fileIn");
+  dz.addEventListener("click",()=>fi.click());
+  ["dragover","dragenter"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("drag")}));
+  ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag")}));
+  dz.addEventListener("drop",e=>{ if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+}
+async function handleFile(file){
+  const reader=new FileReader();
+  reader.onload=async ev=>{
+    pendingImg=await shrink(ev.target.result);
+    $("#previewImg").src=pendingImg; $("#previewWrap").classList.remove("hidden");
+    runOCR(pendingImg);
+  };
+  reader.readAsDataURL(file);
+}
+function shrink(dataUrl,max=1100,q=0.72){
+  return new Promise(res=>{
+    const img=new Image();
+    const to=setTimeout(()=>res(dataUrl),8000);              // never hang on odd formats
+    img.onload=()=>{ clearTimeout(to); try{
+      let{width:w,height:h}=img; if(!w||!h) return res(dataUrl);
+      if(w>max||h>max){const s=max/Math.max(w,h);w*=s;h*=s;}
+      const c=document.createElement("canvas");c.width=w;c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h); res(c.toDataURL("image/jpeg",q));
+    }catch(e){ res(dataUrl); } };
+    img.onerror=()=>{ clearTimeout(to); res(dataUrl); };
+    img.src=dataUrl;
+  });
+}
+async function runOCR(img){
+  const st=$("#ocrStat"); st.textContent=" Reading receipt…";
+  try{
+    const {data}=await Tesseract.recognize(img,"eng",{logger:m=>{
+      if(m.status==="recognizing text") st.textContent=` Reading receipt… ${Math.round(m.progress*100)}%`;
+    }});
+    const t=data.text||""; parseOCR(t);
+    st.textContent=" OCR done — review the fields, then save.";
+  }catch(e){ st.textContent=" OCR unavailable — enter details manually."; }
+}
+function parseOCR(text){
+  const lines=text.split(/\n/).map(l=>l.trim()).filter(Boolean);
+  // amount: prefer total-like, else largest currency number
+  let amt=null; const amts=[];
+  const totalLine=lines.find(l=>/total|amount due|balance/i.test(l)&&/\d/.test(l));
+  const grab=l=>{const m=[...l.matchAll(/\$?\s?(\d{1,4}(?:,\d{3})*(?:\.\d{2}))/g)];m.forEach(x=>amts.push(parseFloat(x[1].replace(/,/g,""))));};
+  if(totalLine) grab(totalLine);
+  if(!amts.length) lines.forEach(grab);
+  if(amts.length) amt=Math.max(...amts);
+  // date
+  let date=null; const dm=text.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/)||text.match(/\b(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
+  if(dm){ try{ let d; if(dm[1].length===4) d=new Date(dm[1],dm[2]-1,dm[3]); else{let y=dm[3];if(y.length===2)y="20"+y; d=new Date(y,dm[1]-1,dm[2]);}
+    if(!isNaN(d)) date=d.toISOString().slice(0,10);}catch(e){} }
+  // vendor: first meaningful line
+  const vendor=(lines.find(l=>l.length>2&&/[a-z]/i.test(l)&&!/receipt|invoice|store|www\.|\.com/i.test(l))||"").slice(0,40);
+  if(amt) $("#fAmount").value=amt.toFixed(2);
+  if(date) $("#fDate").value=date;
+  if(vendor && !$("#fPayee").value) $("#fPayee").value=vendor.replace(/[^\w &.\-']/g,"").trim();
+  // cost center guess
+  const low=text.toLowerCase();
+  const guess = /fuel|gas|marathon|shell|bp|speedway|sunoco|exxon/.test(low)?"Fuel"
+    : /auto|part|napa|advance/.test(low)?"Vehicle Parts"
+    : /hardware|repair|lowe|home depot/.test(low)?"Repairs & Maintenance"
+    : /wash/.test(low)?"Vehicle Washes"
+    : /toll/.test(low)?"Tolls" : null;
+  if(guess) $("#fCC").value=guess;
+}
+
+/* ================= SAVE EXPENSE ================= */
+function nextId(){
+  const nums=DB.expenses.map(e=>parseInt((e.id||"").replace(/\D/g,""))||0);
+  return "R"+String((Math.max(0,...nums)+1)).padStart(3,"0");
+}
+async function saveExpense(){
+  const amount=parseFloat($("#fAmount").value);
+  if(!amount||amount<=0){ toast("Enter a valid amount"); return; }
+  const e={ id:nextId(), date:$("#fDate").value||new Date().toISOString().slice(0,10),
+    payee:$("#fPayee").value.trim()||"—", cc:$("#fCC").value, amount, reimbursed:0,
+    method:$("#fMethod").value, ref:$("#fRef").value.trim(), notes:$("#fNotes").value.trim(),
+    status:$("#fStatus").value, img:null, receiptFileId:null, dateReimbursed:null, createdBy:DB.session };
+  if(e.status==="Paid"){ e.reimbursed=amount; e.dateReimbursed=e.date; }
+  BUSY=true;
+  if(pendingImg){
+    if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id:e.id,dataUrl:pendingImg}); e.receiptFileId=j.fileId; e.imgThumb=await shrink(pendingImg,340,0.55); }
+      catch(err){ e.img=pendingImg; toast("Receipt kept locally (cloud upload failed)"); } }
+    else e.img=pendingImg;
+  }
+  DB.expenses.push(e); BUSY=false; save();
+  pendingImg=null; $("#previewWrap").classList.add("hidden"); $("#ocrStat").textContent="";
+  ["fAmount","fPayee","fRef","fNotes"].forEach(id=>$("#"+id).value="");
+  $("#fStatus").value="Submitted";
+  toast("Saved "+e.id); renderAll(); switchTab("ledger");
+}
+
+/* ================= LEDGER ================= */
+function ledgerRows(){
+  const tx=[];
+  DB.expenses.forEach(e=>tx.push({kind:'expense',date:e.date,id:e.id,e}));
+  DB.deposits.forEach(d=>tx.push({kind:'deposit',date:d.date,id:d.id,d}));
+  tx.sort((a,b)=>((a.date||'')+(a.id||'')).localeCompare((b.date||'')+(b.id||'')));
+  return tx.reverse(); // newest on top
+}
+function renderLedger(){
+  const q=($("#search")?.value||"").toLowerCase();
+  const body=$("#ledgerBody"); body.innerHTML=""; let shown=0;
+  ledgerRows().forEach(t=>{
+    if(t.kind==='expense'){
+      const e=t.e, st=statusOf(e), paid=paidOf(e), owed=owedOf(e);
+      if(q&&!(`${e.payee} ${e.notes} ${e.cc} ${e.method} ${e.ref} ${e.id}`.toLowerCase().includes(q))) return;
+      shown++;
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${hasReceipt(e)?`<img class="thumb" src="${receiptSrc(e)}" onclick="lightbox('${e.id}')" onerror="rcptFallback(this,'${e.id}')"/>`
+          :`<div class="thumb empty" title="Add receipt" onclick="attachReceipt('${e.id}')">+</div>`}</td>
+        <td style="white-space:nowrap">${e.date}<div class="sub-id">${e.id}</div></td>
+        <td>${esc(e.payee)}${e.notes?`<div class="sub-id">${esc(e.notes)}</div>`:""}</td>
+        <td><span class="cc-tag">${esc(e.cc)}</span></td>
+        <td class="amt charge">${money(e.amount)}</td>
+        <td class="amt ${paid>0?'credit':'dim'}">${paid>0?money(paid):'—'}</td>
+        <td class="amt bal">${owed>0.005?money(owed):`<span style="color:#37d67a">$0.00</span>`}</td>
+        <td>${statusPill(st)}</td>
+        <td><button class="iconbtn" title="Adjust / add missing info" onclick="editExpense('${e.id}')">EDIT</button><button class="iconbtn danger" title="Delete this row (requires key)" onclick="delExpense(${DB.expenses.indexOf(e)})">DEL</button></td>`;
+      body.appendChild(tr);
+    } else {
+      const d=t.d;
+      if(q&&!(`deposit ${d.from} ${d.note} ${d.method}`.toLowerCase().includes(q))) return;
+      shown++;
+      const tr=document.createElement("tr"); tr.className="deprow-line";
+      tr.innerHTML=`
+        <td class="credit-mark">IN</td>
+        <td style="white-space:nowrap">${d.date}</td>
+        <td>DEPOSIT — ${esc(d.from)}${d.isPayroll?` <span class="pill st-Submitted">PAYROLL</span>`:""}${d.note?`<div class="sub-id">${esc(d.note)}</div>`:""}</td>
+        <td><span class="cc-tag credit">Deposit · ${esc(d.method)}</span></td>
+        <td class="amt dim">—</td>
+        <td class="amt credit">${money(d.amount)}</td>
+        <td class="amt dim">—</td>
+        <td>${d.confirmed?statusPill('Confirmed'):`<span class="pend">pending</span>`}</td>
+        <td>${isAdmin()?`<input type="checkbox" class="chk" ${d.confirmed?"checked":""} title="Confirm deposit — applies it to expenses" onchange="confirmDeposit('${d.id}',this.checked)"/>`:(d.confirmed?"OK":"…")}</td>`;
+      body.appendChild(tr);
+    }
+  });
+  if(!shown) body.innerHTML=`<tr><td colspan="9" style="text-align:center;color:var(--dim);padding:26px">Nothing to show.</td></tr>`;
+}
+function togglePaid(id,on){
+  const e=DB.expenses.find(x=>x.id===id); if(!e)return;
+  if(on){ e.reimbursed=+e.amount; e.status="Paid"; e.dateReimbursed=e.dateReimbursed||new Date().toISOString().slice(0,10); }
+  else{ e.reimbursed=0; e.status="Submitted"; e.dateReimbursed=null; }
+  save(); renderAll();
+}
+function delExpense(idx){
+  const e=DB.expenses[idx];
+  if(!e){ toast("Row not found — refresh and try again"); return; }
+  const key=prompt(`Delete ${e.id} — ${esc(e.payee)} ${money(e.amount)} (${e.date})?\n\nThis removes ONLY this row. Enter the delete key to confirm:`);
+  if(key===null) return;                                  // user cancelled
+  if(key!==DELETE_KEY){ toast("Wrong delete key — nothing deleted"); return; }
+  DB.expenses.splice(idx,1);                              // remove exactly this row (safe with duplicate IDs)
+  save(); renderAll(); toast("Deleted "+e.id);
+}
+function attachReceipt(id){
+  const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
+  inp.style.cssText="position:fixed;left:-9999px;top:0"; document.body.appendChild(inp); // iOS needs it in the DOM
+  inp.onchange=e=>{ const f=e.target.files[0]; if(!f){inp.remove();return;} BUSY=true; toast("Uploading receipt…"); const r=new FileReader();
+    r.onload=async ev=>{ const dataUrl=await shrink(ev.target.result);
+      let fileId=null, thumb=null, localImg=null;
+      if(online()){ try{ const c=cred(); const j=await api("upload",{email:c.email,pass:c.pass,id,dataUrl}); fileId=j.fileId; thumb=await shrink(dataUrl,340,0.55); }catch(err){ localImg=dataUrl; toast("Saved on device (cloud upload failed)"); } }
+      else localImg=dataUrl;
+      const e2=DB.expenses.find(x=>x.id===id);   // re-find AFTER awaits — DB may have been refreshed
+      if(e2){ if(fileId){ e2.receiptFileId=fileId; e2.imgThumb=thumb; e2.img=null; } else { e2.img=localImg; } }
+      BUSY=false; save(); renderLedger(); toast("Receipt attached"); inp.remove(); };
+    r.onerror=()=>{ BUSY=false; toast("Could not read that photo"); inp.remove(); };
+    r.readAsDataURL(f); };
+  inp.click();
+}
+
+/* ================= EDIT MODAL ================= */
+function editExpense(id){
+  const e=DB.expenses.find(x=>x.id===id); if(!e)return;
+  const ccOpts=COST_CENTERS.map(c=>`<option ${c===e.cc?"selected":""}>${c}</option>`).join("");
+  const stOpts=["Not Submitted","Submitted","Paid"].map(s=>`<option ${s===e.status?"selected":""}>${s}</option>`).join("");
+  modal(`
+    <h3>Edit ${e.id}</h3>
+    <p style="color:var(--mut);font-size:12px;margin-top:0">Adjust OCR gaps or manual entries.</p>
+    <div class="frow"><div class="field"><label>Date</label><input type="date" id="eDate" value="${e.date}"></div>
+      <div class="field"><label>Amount</label><input type="number" step="0.01" id="eAmt" value="${e.amount}"></div></div>
+    <div class="field"><label>Payee</label><input id="ePayee" value="${esc(e.payee)}"></div>
+    <div class="frow"><div class="field"><label>Cost Center</label><select id="eCC">${ccOpts}</select></div>
+      <div class="field"><label>Reimbursed ($)</label><input type="number" step="0.01" id="eReimb" value="${e.reimbursed||0}"></div></div>
+    <div class="frow"><div class="field"><label>Method</label><input id="eMethod" value="${esc(e.method||"")}"></div>
+      <div class="field"><label>Status</label><select id="eStatus">${stOpts}</select></div></div>
+    <div class="field"><label>Receipt Ref</label><input id="eRef" value="${esc(e.ref||"")}"></div>
+    <div class="field"><label>Notes</label><textarea id="eNotes" rows="2">${esc(e.notes||"")}</textarea></div>
+    ${receiptSrc(e)?`<img src="${receiptSrc(e)}" style="width:100%;max-height:200px;object-fit:contain;border-radius:10px;border:1px solid var(--line2);background:#03060e">`:""}
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn ghost" style="flex:1" onclick="closeModal()">Cancel</button>
+      <button class="btn primary" style="flex:1" onclick="saveEdit('${e.id}')">Save Changes</button>
+    </div>`);
+}
+function saveEdit(id){
+  const e=DB.expenses.find(x=>x.id===id);
+  e.date=$("#eDate").value; e.amount=parseFloat($("#eAmt").value)||0;
+  e.payee=$("#ePayee").value.trim(); e.cc=$("#eCC").value;
+  e.reimbursed=parseFloat($("#eReimb").value)||0; e.method=$("#eMethod").value.trim();
+  e.status=$("#eStatus").value; e.ref=$("#eRef").value.trim(); e.notes=$("#eNotes").value.trim();
+  if(e.status==="Paid"&&e.reimbursed<e.amount){ e.reimbursed=e.amount; }
+  if(e.reimbursed>=e.amount&&e.amount>0){ e.dateReimbursed=e.dateReimbursed||new Date().toISOString().slice(0,10); }
+  save(); closeModal(); renderAll(); toast("Updated "+id);
+}
+
+/* ================= DEPOSITS ================= */
+function saveDeposit(){
+  const amount=parseFloat($("#dAmount").value);
+  if(!amount||amount<=0){ toast("Enter deposit amount"); return; }
+  const from=$("#dFrom").value.trim(), method=$("#dMethod").value;
+  const isPayroll = method==="Apple Cash" && /aaron/i.test(from) && amount>=PAYROLL_THRESHOLD;
+  const d={ id:"D"+Date.now().toString(36), date:$("#dDate").value, amount, from, method,
+    note:$("#dNote").value.trim(), createdBy:DB.session, confirmed:false, allocations:[],
+    isPayroll, fee:isPayroll?PAYROLL_FEE:0 };
+  DB.deposits.unshift(d); save();
+  $("#dAmount").value=""; $("#dNote").value="";
+  toast(isPayroll?"Payroll deposit logged (+$45 fee)":"Deposit logged — awaiting confirmation");
+  renderAll();
+}
+function renderDeposits(){
+  const list=$("#depositList"); const admin=isAdmin();
+  const pending=DB.deposits.filter(d=>!d.confirmed);
+  const confirmedN=DB.deposits.length-pending.length;
+  if(!pending.length){ list.innerHTML=`<div style="color:var(--dim);text-align:center;padding:20px">No deposits awaiting confirmation.${confirmedN?` ${confirmedN} confirmed — posted to the Ledger.`:""}</div>`; return; }
+  list.innerHTML=pending.map(d=>`<div class="deprow pending">
+    <div>
+      <div class="dep-amt">${money(d.amount)} <span style="font-size:12px;color:var(--mut);font-weight:500">from ${esc(d.from)} · ${esc(d.method)} · ${d.date}</span>
+        ${d.isPayroll?`<span class="pill st-Submitted" style="margin-left:6px">PAYROLL +$45 FEE</span>`:""}</div>
+      <div class="dep-meta">${esc(d.note||"")} · logged by ${esc((d.createdBy||"").split("@")[0])} · <span style="color:var(--amber)">awaiting confirmation</span></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      ${admin?`<button class="btn sm good" onclick="confirmDeposit('${d.id}',true)">Confirm</button>`:""}
+      ${admin?`<button class="btn sm danger" onclick="delDeposit('${d.id}')">Remove</button>`:""}
+    </div></div>`).join("");
+}
+function confirmDeposit(id,on){
+  if(!isAdmin()){ toast("Only the owner can confirm deposits"); renderLedger(); return; }
+  const d=DB.deposits.find(x=>x.id===id); if(!d)return;
+  d.confirmed=!!on; save(); renderAll();
+  toast(on?"Deposit confirmed — balance updated":"Deposit set to pending");
+}
+function delDeposit(id){ if(!confirm("Remove this deposit?"))return;
+  DB.deposits=DB.deposits.filter(x=>x.id!==id); save(); renderAll(); }
+
+/* ================= METRICS ================= */
+function computeMetrics(){
+  recalcAlloc();
+  const yr=new Date().getFullYear();
+  let all=0,ytd=0,open=0,unpaid=0,reimb=0;
+  DB.expenses.forEach(e=>{ const a=+e.amount||0; all+=a; if(new Date(e.date).getFullYear()===yr) ytd+=a;
+    const o=owedOf(e); unpaid+=o; reimb+=paidOf(e); if(o>0.005) open++; });
+  const received=DB.deposits.filter(d=>d.confirmed).reduce((s,d)=>s+(+d.amount||0),0);
+  const feesFromPayroll=DB.deposits.filter(d=>d.isPayroll).reduce((s,d)=>s+(+d.fee||0),0);
+  return { all,ytd,reimb,received,unpaid,open, credit:ALLOC.credit, outstanding:unpaid,
+           fees:FEES_BASELINE+feesFromPayroll, feesFromPayroll };
+}
+function renderMetrics(){
+  const m=computeMetrics();
+  const cards=[
+    {lab:"Total Personal Spent",val:money(m.all),sub:"all logged expenses",cls:""},
+    {lab:"Received (Deposits)",val:money(m.received),sub:(m.credit>0?"paid to you · "+money(m.credit)+" credit":"paid to you"),cls:"accent-green"},
+    {lab:"Reimbursed",val:money(m.reimb),sub:"deposits applied to expenses",cls:"accent-green"},
+    {lab:"Total Unpaid",val:money(m.unpaid),sub:"Spent − Reimbursed · still owed",cls:"accent-red"},
+    {lab:"Open Expenses",val:m.open,sub:"not fully covered",cls:""},
+    {lab:"Transfer Fees",val:money(m.fees),sub:"payroll + money sent to people",cls:"accent-amber"},
+  ];
+  $("#metricGrid").innerHTML=cards.map(c=>`
+    <div class="card hoverable metric ${c.cls}">
+      <div class="lab">${c.lab}</div>
+      <div class="val">${c.val}</div><div class="sub">${c.sub}</div>
+    </div>`).join("");
+  $("#outstandingBig").textContent=money(m.outstanding);
+  const byCC={}; DB.expenses.forEach(e=>{ const o=owedOf(e); if(o>0.005) byCC[e.cc]=(byCC[e.cc]||0)+o; });
+  const seg=Object.entries(byCC).sort((a,b)=>b[1]-a[1]);
+  $("#outstandingBar").innerHTML = seg.length
+    ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin-top:14px">
+        ${seg.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border:1px solid var(--line);border-radius:12px;background:rgba(15,20,40,.5)">
+          <span style="color:var(--mut);font-size:12.5px">${esc(s[0])}</span><b style="font-size:15px">${money(s[1])}</b></div>`).join("")}
+      </div>`
+    : `<div style="color:var(--dim);margin-top:10px">Nothing outstanding.</div>`;
+}
+
+/* ================= P&L + YTD + FEES ================= */
+function renderPNL(){
+  const byCC={}; DB.expenses.forEach(e=>byCC[e.cc]=(byCC[e.cc]||0)+(+e.amount));
+  const rows=Object.entries(byCC).sort((a,b)=>b[1]-a[1]);
+  const total=rows.reduce((s,r)=>s+r[1],0);
+  $("#glList").innerHTML=rows.length?(rows.map(r=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)">
+      <span class="glname">${esc(r[0])}</span><b class="glval">${money(r[1])}</b></div>`).join("")
+    +`<div style="display:flex;justify-content:space-between;align-items:center;padding:13px 14px;border-top:1px solid var(--line2)">
+      <span style="font-weight:700">Total</span><b style="font-size:16px;color:var(--cyan)">${money(total)}</b></div>`)
+    :`<div style="color:var(--dim)">No data.</div>`;
+  $("#ytdList").innerHTML=SEED_YTD.map(([m,b])=>`<div class="box"><div class="m">${m}</div><div class="b">${money(b)}</div></div>`).join("")
+    +`<div class="box" style="border-color:var(--line2);background:rgba(31,214,220,.1)"><div class="m">Ending Balance</div><div class="b">${money(SEED_YTD[SEED_YTD.length-1][1])}</div></div>`;
+}
+function renderFees(){
+  const m=computeMetrics();
+  $("#feesTotal").textContent=money(m.fees);
+  const payrollRuns=DB.deposits.filter(d=>d.isPayroll);
+  $("#feeBreak").innerHTML=`
+    <div class="checkline"><div style="flex:1">Baseline YTD (Payroll + Expenditures)</div><b>${money(FEES_BASELINE)}</b></div>
+    <div class="checkline"><div style="flex:1">Detected payroll runs · ${payrollRuns.length} × $45</div><b>${money(m.feesFromPayroll)}</b></div>
+    <div class="checkline" style="color:var(--txt)"><div style="flex:1"><b>Total transfer fees YTD</b></div><b style="color:var(--amber)">${money(m.fees)}</b></div>`;
+}
+
+/* ================= USERS ================= */
+function openUsers(){
+  if(!isAdmin()) return;
+  modal(`
+    <h3>Users &amp; Access</h3>
+    <p style="color:var(--mut);font-size:12px;margin-top:0">Add teammates. Default password <b>Supplynow1!</b> — they can be admins (confirm deposits) or members.</p>
+    <div id="userList" style="margin:12px 0">${DB.users.map(u=>`
+      <div class="checkline"><div style="flex:1">${esc(u.name)} · ${esc(u.email)} ${u.admin?'<span class="badge">admin</span>':''}</div>
+        ${u.email!==ADMIN_EMAIL?`<button class="btn sm danger" onclick="rmUser('${u.email}')">remove</button>`:'<span style="color:var(--dim);font-size:11px">owner</span>'}</div>`).join("")}</div>
+    <div class="frow"><div class="field"><label>Name</label><input id="nuName" placeholder="First name"></div>
+      <div class="field"><label>Email</label><input id="nuEmail" placeholder="name@supplynow.org"></div></div>
+    <div class="frow"><div class="field"><label>Password</label><input id="nuPass" value="Supplynow1!"></div>
+      <div class="field"><label>Role</label><select id="nuRole"><option value="member">Member</option><option value="admin">Admin</option></select></div></div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn ghost" style="flex:1" onclick="closeModal()">Done</button>
+      <button class="btn primary" style="flex:1" onclick="addUser()">Add User</button></div>`);
+}
+function addUser(){
+  const name=$("#nuName").value.trim(), email=$("#nuEmail").value.trim().toLowerCase(), pass=$("#nuPass").value||"Supplynow1!";
+  if(!name||!email){ toast("Name & email required"); return; }
+  if(DB.users.some(u=>u.email===email)){ toast("User already exists"); return; }
+  DB.users.push({name,email,pass,admin:$("#nuRole").value==="admin"}); save(); openUsers(); toast("User added");
+}
+function rmUser(email){ if(email===ADMIN_EMAIL)return; DB.users=DB.users.filter(u=>u.email!==email); save(); openUsers(); }
+
+/* ================= CONNECT (live cloud) ================= */
+function openConnect(){
+  if(!isAdmin()) return;
+  const cur=LS.get("endpoint","");
+  modal(`
+    <h3>Live Cloud Storage</h3>
+    <p style="color:var(--mut);font-size:12px;margin-top:0">Paste your deployed Google Apps Script <b>/exec</b>URL to make this shared &amp; live on every device and save receipts to Drive. Setup steps are in <code>backend/Code.gs</code>.</p>
+    <div class="field"><label>Web App URL</label><input id="cxUrl" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(cur)}"></div>
+    <div id="cxStat" style="font-size:12px;min-height:16px;color:var(--cyan)"></div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn ghost" style="flex:1" onclick="testConnect()">Test</button>
+      <button class="btn primary" style="flex:1" onclick="saveConnect()">Save &amp; Go Live</button>
+    </div>
+    ${cur?`<button class="btn danger sm" style="width:100%;margin-top:10px" onclick="LS.set('endpoint','');closeModal();toast('On-device mode');location.reload()">Disconnect (on-device only)</button>`:""}`);
+}
+async function testConnect(){
+  const u=$("#cxUrl").value.trim(), s=$("#cxStat"); s.style.color="var(--cyan)"; s.textContent="Testing…";
+  try{ const r=await fetch(u,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"ping"})}); const j=await r.json();
+    s.style.color=j.ready?"var(--green)":"var(--amber)"; s.textContent=j.ready?" Connected — backend ready.":"Reached it — now run setup() in Apps Script."; }
+  catch(e){ s.style.color="var(--red)"; s.textContent="× Could not reach that URL."; }
+}
+async function saveConnect(){
+  const u=$("#cxUrl").value.trim(); if(!u){ toast("Paste the URL"); return; }
+  LS.set("endpoint",u);
+  try{ const c=cred(); const j=await api("login",{email:c.email,pass:c.pass});
+    if(j.state){ DB.users=j.state.users; DB.expenses=j.state.expenses; DB.deposits=j.state.deposits; save(); } }catch(e){}
+  closeModal(); toast(" Live cloud storage on"); location.reload();
+}
+
+/* ================= DRIVE PHOTO MATCH ================= */
+async function openMatch(){
+  if(!online()){ toast("Connect cloud storage first ( Connect)"); return; }
+  modal(`<h3>Match Drive Receipt Photos</h3>
+    <p style="color:var(--mut);font-size:12px;margin-top:0">Photos in your Drive “Receipt Inbox” folder. Pick the expense each belongs to.</p>
+    <div id="mxList" style="min-height:60px;color:var(--dim)">Loading…</div>`);
+  try{ const j=await api("inbox",{}); const imgs=j.images||[];
+    $("#mxList").innerHTML = imgs.length ? imgs.map(im=>`
+      <div class="checkline"><img class="thumb" src="${im.thumb}">
+        <div style="flex:1">${esc(im.name)}<div style="font-size:11px;color:var(--dim)">${im.date}</div></div>
+        <select data-fid="${im.fileId}" class="mxsel" style="max-width:160px"><option value="">attach to…</option>
+          ${[...DB.expenses].sort((a,b)=>b.date.localeCompare(a.date)).map(e=>`<option value="${e.id}">${e.id} · ${esc(e.payee)} · ${money(e.amount)}</option>`).join("")}</select>
+      </div>`).join("") : `<div style="color:var(--dim);padding:14px">No photos waiting in the Drive inbox.</div>`;
+    $$(".mxsel").forEach(sel=>sel.onchange=()=>{ if(sel.value){ const e=DB.expenses.find(x=>x.id===sel.value);
+      e.receiptFileId=sel.dataset.fid; e.img=null; save(); toast("Matched → "+sel.value); renderLedger(); } });
+  }catch(e){ $("#mxList").innerHTML=`<div style="color:var(--red)">${esc(e.message)}</div>`; }
+}
+
+/* ================= MODAL / LIGHTBOX ================= */
+function modal(html){ $("#modalRoot").innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="card modal"><button class="btn ghost sm close" onclick="closeModal()">×</button>${html}</div></div>`; }
+function closeModal(){ $("#modalRoot").innerHTML=""; }
+function lightbox(id){ const e=DB.expenses.find(x=>x.id===id); const src=receiptView(e); if(!src)return;
+  $("#modalRoot").innerHTML=`<div class="overlay lightbox" onclick="closeModal()"><img id="lbimg"/></div>`;
+  const img=$("#lbimg"); img.onerror=()=>{ const fb=e.img||e.imgThumb; if(fb&&img.src!==fb) img.src=fb; }; img.src=src; }
+
+/* ================= EXPORT ================= */
+function exportData(){
+  const blob=new Blob([JSON.stringify({users:DB.users,expenses:DB.expenses,deposits:DB.deposits,exportedAt:new Date().toISOString()},null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="supplynow-ledger-backup.json"; a.click(); toast("Backup downloaded");
+}
+
+/* ================= TABS / RENDER ================= */
+function switchTab(t){
+  $$(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===t));
+  ["dash","add","ledger","deposits","pnl"].forEach(x=>$("#tab-"+x).classList.toggle("hidden",x!==t));
+}
+function renderAll(){ recalcAlloc(); renderMetrics(); renderLedger(); renderDeposits(); renderPNL(); renderFees(); }
+
+/* ================= card glow tracking ================= */
+document.addEventListener("mousemove",e=>{
+  const c=e.target.closest?.(".card.hoverable"); if(!c)return;
+  const r=c.getBoundingClientRect();
+  c.style.setProperty("--mx",((e.clientX-r.left)/r.width*100)+"%");
+  c.style.setProperty("--my",((e.clientY-r.top)/r.height*100)+"%");
+});
+
+/* ================= BOOT ================= */
+seedIfEmpty(); wireDrop();
+$("#liPass").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()});
+if(DB.session && currentUser()) enterApp();
+</script>
+</body>
+</html>
