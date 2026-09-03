@@ -682,7 +682,7 @@ function renderLedger(){
         <td class="amt charge">${money(e.amount)}</td>
         <td class="amt dim">—</td>
         <td class="amt bal">${money(t.balance)}</td>
-        <td><input type="checkbox" class="chk" ${st==="Paid"?"checked":""} onchange="togglePaid('${e.id}',this.checked)"/></td>
+        <td><input type="checkbox" class="chk" ${st==="Paid"?"checked":""} onchange="togglePaid(${DB.expenses.indexOf(e)},this.checked)"/></td>
         <td><button class="iconbtn" title="Adjust / add missing info" onclick="editExpense('${e.id}')">EDIT</button><button class="iconbtn danger" title="Delete this row (requires key)" onclick="delExpense(${DB.expenses.indexOf(e)})">DEL</button></td>`;
       body.appendChild(tr);
     } else {
@@ -708,8 +708,8 @@ function renderLedger(){
   const nToday=DB.expenses.filter(e=>postedDay(e)===td).length, nYest=DB.expenses.filter(e=>postedDay(e)===yd).length;
   const st=$("#postedStat"); if(st) st.innerHTML=`posted <b style="color:#4bd6c8">today ${nToday}</b> · <b style="color:#4bd6c8">yesterday ${nYest}</b> · ${DB.expenses.length} total`;
 }
-function togglePaid(id,on){
-  const e=DB.expenses.find(x=>x.id===id); if(!e)return;
+function togglePaid(idx,on){
+  const e=DB.expenses[idx]; if(!e)return;   // by exact row index — correct even when two rows share an ID
   if(on){ e.reimbursed=+e.amount; e.status="Paid"; e.dateReimbursed=e.dateReimbursed||new Date().toISOString().slice(0,10); }
   else{ e.reimbursed=0; e.status="Submitted"; e.dateReimbursed=null; }
   save(); renderAll();
